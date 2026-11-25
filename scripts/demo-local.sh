@@ -41,7 +41,10 @@ STOPPED=0
 cleanup() {
   [ "$STOPPED" = 1 ] && return
   STOPPED=1
-  trap - INT TERM EXIT
+  # pnpm may send TERM or close our output while we clean up. Neither may cut the cleanup short.
+  trap '' INT TERM PIPE
+  trap - EXIT
+  set +e
   echo
   echo "Stopping anvil, the server and the web app..."
   local all="" pid
