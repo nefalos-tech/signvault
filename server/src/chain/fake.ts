@@ -101,7 +101,7 @@ export class FakeChain implements ChainPort {
     return this.send(() => {
       // Another change may have landed during the await. The chain checks the approval against the nonce at execution.
       if (!signed || vault.nonce !== nonce) return 'OwnerApprovalRequired';
-      if (amount === 0n) vault.payees.delete(payee);
+      if (amount === 0n) vault.payees = removeSwapAndPop(vault.payees, payee);
       else vault.payees.set(payee, amount);
       vault.nonce += 1n;
     });
@@ -163,6 +163,16 @@ function acceptedByTryRecover(signature: Hex): boolean {
   if (!isHex(signature, { strict: true }) || size(signature) !== 65) return false;
   const v = hexToNumber(slice(signature, 64));
   return (v === 27 || v === 28) && hexToBigInt(slice(signature, 32, 64)) <= MAX_S;
+}
+
+/** OpenZeppelin `EnumerableMap.remove` moves the last entry into the removed slot, and `payees()` shows that order. */
+function removeSwapAndPop(payees: Map<Address, bigint>, to: Address): Map<Address, bigint> {
+  const entries = [...payees];
+  const i = entries.findIndex(([a]) => a === to);
+  if (i === -1) return payees;
+  entries[i] = entries[entries.length - 1];
+  entries.pop();
+  return new Map(entries);
 }
 
 /** MockUSD `transfer` (OpenZeppelin ERC20). The wallet calls it after its own checks and before its own writes. */

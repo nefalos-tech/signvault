@@ -190,6 +190,14 @@ describe('setPayee', () => {
     expect(await chain.vaultPay(v1)).toEqual(refused('NotOnTheList'));
   });
 
+  it('lists payees in EnumerableMap order: removal moves the last payee into the gap', async () => {
+    const { chain } = setup();
+    expect(await chain.vaultSetPayee(v2, INVOICE_AMOUNT, await sign(owner, v2, INVOICE_AMOUNT, 0n), 'operator')).toEqual(sent);
+    expect(await chain.vaultSetPayee(v3, INVOICE_AMOUNT, await sign(owner, v3, INVOICE_AMOUNT, 1n), 'operator')).toEqual(sent);
+    expect(await chain.vaultSetPayee(v1, 0n, await sign(owner, v1, 0n, 2n), 'operator')).toEqual(sent);
+    expect((await chain.readState()).signvault.payees.map((p) => p.to)).toEqual([v3, v2]);
+  });
+
   it('changes the amount of a listed payee', async () => {
     const { chain } = setup();
     const amount = 3n * INVOICE_AMOUNT;
