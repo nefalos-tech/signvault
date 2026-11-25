@@ -2,17 +2,9 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ISignVault} from "../src/interfaces/ISignVault.sol";
+import {MockUSD} from "../src/MockUSD.sol";
 import {SignVault} from "../src/SignVault.sol";
-
-contract TestUSD is ERC20 {
-    constructor() ERC20("Test USD", "tUSD") {}
-
-    function mint(address to, uint256 amount) external {
-        _mint(to, amount);
-    }
-}
 
 contract SignVaultTest is Test {
     uint256 constant AMOUNT = 10_000_000_000_000_000;
@@ -23,7 +15,7 @@ contract SignVaultTest is Test {
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
     bytes32 constant SET_PAYEE_TYPEHASH = keccak256("SetPayee(address to,uint256 amount,uint256 nonce)");
 
-    TestUSD cash;
+    MockUSD cash;
     SignVault vault;
     address owner;
     uint256 ownerKey;
@@ -41,7 +33,7 @@ contract SignVaultTest is Test {
         vendor2 = makeAddr("vendor2");
         vendor3 = makeAddr("vendor3");
         stranger = makeAddr("stranger");
-        cash = new TestUSD();
+        cash = new MockUSD();
         vault = new SignVault(cash, owner, agent, PERIOD, _vendor1Only());
         cash.mint(address(vault), FUNDS);
     }
