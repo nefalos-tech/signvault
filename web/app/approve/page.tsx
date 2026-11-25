@@ -26,6 +26,14 @@ async function getJson<T>(path: string): Promise<T> {
   return res.json();
 }
 
+async function fetchVault() {
+  const [state, changes] = await Promise.all([
+    getJson<AppState>('/api/state'),
+    getJson<PendingChange[]>('/api/vault/changes'),
+  ]);
+  return { state, changes };
+}
+
 function errorText(err: unknown) {
   if (err && typeof err === 'object' && 'shortMessage' in err) return String(err.shortMessage);
   return err instanceof Error ? err.message : String(err);
@@ -39,8 +47,8 @@ export default function ApprovePage() {
 
   useEffect(() => {
     if (MOCK) return;
-    Promise.all([getJson<AppState>('/api/state'), getJson<PendingChange[]>('/api/vault/changes')])
-      .then(([state, changes]) => setLoad({ kind: 'ready', state, changes }))
+    fetchVault()
+      .then((vault) => setLoad({ kind: 'ready', ...vault }))
       .catch((err) => setLoad({ kind: 'error', message: errorText(err) }));
   }, []);
 
@@ -56,20 +64,26 @@ export default function ApprovePage() {
       return;
     }
     try {
-      setStep(change.id, { kind: 'busy', label: 'Check your wallet…' });
-      const { account, signature } = await signApproval(
-        window.ethereum,
-        change,
-        state,
-        MOCK ? undefined : state.addresses.owner,
-      );
       if (MOCK) {
+        setStep(change.id, { kind: 'busy', label: 'Check your wallet…' });
+        const { account, signature } = await signApproval(window.ethereum, change, state, undefined);
         setStep(change.id, { kind: 'signed', account, signature });
         return;
       }
+      // Another approval may have moved the vault's nonce since this list was read, so sign what the server holds now.
+      setStep(change.id, { kind: 'busy', label: 'Checking the vault…' });
+      const vault = await fetchVault();
+      setLoad({ kind: 'ready', ...vault });
+      const current = vault.changes.find((c) => c.id === change.id);
+      if (current?.status !== 'pending') {
+        setStep(change.id, { kind: 'idle' });
+        return;
+      }
+      setStep(change.id, { kind: 'busy', label: 'Check your wallet…' });
+      const { signature } = await signApproval(window.ethereum, current, vault.state, vault.state.addresses.owner);
       setStep(change.id, { kind: 'busy', label: 'Sending to the vault…' });
-      const updated = await postApproval(change.id, signature);
-      setLoad({ kind: 'ready', state, changes: changes.map((c) => (c.id === updated.id ? updated : c)) });
+      await postApproval(change.id, signature);
+      setLoad({ kind: 'ready', ...(await fetchVault()) });
       setStep(change.id, { kind: 'idle' });
     } catch (err) {
       setStep(change.id, { kind: 'error', message: errorText(err) });
