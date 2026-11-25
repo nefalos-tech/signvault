@@ -1,0 +1,57 @@
+{
+  "agent": "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+  "attacker": "0x08324C0cba6EcF6AfC1A35E5E69483428bbE13dD",
+  "chainId": 31337,
+  "explorerUrl": "",
+  "mockUsd": "0x5FbDB2315678afecb367f032d93F642f64180aa3",
+  "operator": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  "owner": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+  "pairs": [
+    {
+      "baselineWallet": "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512",
+      "signVault": "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"
+    },
+    {
+      "baselineWallet": "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707",
+      "signVault": "0x0165878A594ca255338adfa4d48449f69242Eb8F"
+    },
+    {
+      "baselineWallet": "0x8A791620dd6260079BF849Dc5567aDC3F2FdC318",
+      "signVault": "0x610178dA211FEF7D417bC0e6FeD39F05609AD788"
+    },
+    {
+      "baselineWallet": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
+      "signVault": "0x9A676e781A523b5d0C0e43731313A708CB607508"
+    },
+    {
+      "baselineWallet": "0x9A9f2CCfdE556A7E9Ff0848998Aa4a0CFD8863AE",
+      "signVault": "0x68B1D87F95878fE05B998F19b66F4baba5De1aed"
+    },
+    {
+      "baselineWallet": "0x59b670e9fA9D0A427751Af201D676719a970857b",
+      "signVault": "0x4ed7c70F96B99c776995fB64377f0d4aB3B0e1C1"
+    },
+    {
+      "baselineWallet": "0x4A679253410272dd5232B3Ff7cF5dbB88f295319",
+      "signVault": "0x7a2088a1bFc9d81c55368AE168C2C02570cB814F"
+    },
+    {
+      "baselineWallet": "0x67d269191c92Caf3cD7723F116c85e6E9bf55933",
+      "signVault": "0xE6E340D132b5f46d1e472DebcD681B2aBc16e57E"
+    }
+  ],
+  "vendors": [
+    {
+      "address": "0x63c4E507E171CA1FD9A3638502ee278c16D04B2C",
+      "name": "Vendor 1"
+    },
+    {
+      "address": "0xE0C855b40fbC11530989c2205b5C723848ba9E3A",
+      "name": "Vendor 2"
+    },
+    {
+      "address": "0xACc27d04316e225ecb340C0bB7D8B6BA482B03cD",
+      "name": "Vendor 3"
+    }
+  ]
+}
