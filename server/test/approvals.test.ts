@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { parseUnits } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import {
   BASELINE_DAILY_CAP,
+  FAKE_KEY_LABELS,
   INVOICE_AMOUNT,
+  labelKey,
+  setPayeeTypedData,
   VENDORS,
   type Address,
   type ChainPort,
@@ -12,9 +16,11 @@ import {
   type TxResult,
 } from '@signvault/shared';
 import { Approvals } from '../src/approvals';
+import { FakeChain } from '../src/chain/fake';
 import { Provider } from '../src/provider';
 
 const VENDOR2 = VENDORS[1].address;
+const VENDOR3 = VENDORS[2].address;
 const SIG = `0x${'11'.repeat(65)}` as Hex;
 const TX = `0x${'cd'.repeat(32)}` as Hex;
 
@@ -181,5 +187,59 @@ describe('Approvals', () => {
     approvals.list()[0].status = 'failed';
 
     expect(approvals.list()[0].status).toBe('pending');
+  });
+
+  // Seen live on anvil: the agent files Vendor 2 and Vendor 3 at nonce 0, the owner approves one,
+  // and the other could never be approved because /approve signed the stale nonce it carried.
+  it('every pending change stays approvable, in any order, after another one applies', async () => {
+    const chain = new FakeChain();
+    const approvals = new Approvals(chain, stubInbox());
+    const owner = privateKeyToAccount(labelKey(FAKE_KEY_LABELS.owner));
+    // What /approve does: sign SetPayee over the nonce the pending change carries.
+    const ownerSigns = async (change: { to: Address; amount: string; nonce: string }) => {
+      const { chainId, addresses } = await chain.readState();
+      return owner.signTypedData(setPayeeTypedData({
+        chainId, vault: addresses.signVault, to: change.to, amount: BigInt(change.amount), nonce: BigInt(change.nonce),
+      }));
+    };
+
+    const v2 = await approvals.request(VENDOR2, INVOICE_AMOUNT);
+    const v3 = await approvals.request(VENDOR3, INVOICE_AMOUNT);
+    expect([v2.nonce, v3.nonce]).toEqual(['0', '0']);
+
+    const first = await approvals.approve(v3.id, await ownerSigns(v3));
+    expect(first).toMatchObject({ status: 'applied' });
+
+    const left = approvals.list().find((c) => c.id === v2.id)!;
+    expect(left).toMatchObject({ status: 'pending', nonce: (await chain.readState()).signvault.nonce });
+    const second = await approvals.approve(left.id, await ownerSigns(left));
+
+    expect(second).toMatchObject({ status: 'applied' });
+    expect(second.error).toBeUndefined();
+    const { signvault } = await chain.readState();
+    expect(signvault.nonce).toBe('2');
+    expect(signvault.payees.map((p) => p.to)).toEqual(expect.arrayContaining([VENDOR2, VENDOR3]));
+  });
+
+  // The spec is silent. Chosen: a request matching an open change (same payee and amount, not yet
+  // applied) returns that change as it stands and sends no second notice.
+  it('a request for a change that is already open adds no row and sends no second notice', async () => {
+    const inbox = stubInbox();
+    const { chain } = stubChain();
+    const approvals = new Approvals(chain, inbox);
+
+    const first = await approvals.request(VENDOR2, INVOICE_AMOUNT);
+    const again = await approvals.request(VENDOR2.toLowerCase() as Address, INVOICE_AMOUNT);
+
+    expect(again).toEqual(first);
+    expect(approvals.list()).toEqual([first]);
+    expect(inbox.list()).toHaveLength(1);
+
+    // A different amount, or the same change once applied, is a new request.
+    await approvals.request(VENDOR2, INVOICE_AMOUNT * 2n);
+    await approvals.approve(first.id, SIG);
+    await approvals.request(VENDOR2, INVOICE_AMOUNT);
+    expect(approvals.list()).toHaveLength(3);
+    expect(inbox.list()).toHaveLength(3);
   });
 });
