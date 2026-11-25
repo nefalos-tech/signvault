@@ -151,8 +151,25 @@ describe('Approvals', () => {
 
   it('approving an unknown change rejects', async () => {
     const { chain, setPayeeCalls } = stubChain();
-    await expect(new Approvals(chain, stubInbox()).approve('nope', SIG)).rejects.toThrow();
+    await expect(new Approvals(chain, stubInbox()).approve('nope', SIG)).rejects.toThrow(/UnknownChange/);
     expect(setPayeeCalls).toEqual([]);
+  });
+
+  it('a failed change can be approved again, and success clears the error', async () => {
+    const { chain, setPayeeCalls } = stubChain({ ok: false, error: 'BadSignature', txHash: TX });
+    const approvals = new Approvals(chain, stubInbox());
+    const { id } = await approvals.request(VENDOR2, INVOICE_AMOUNT);
+    expect((await approvals.approve(id, SIG)).status).toBe('failed');
+
+    chain.vaultSetPayee = async (...args: SetPayeeCall) => {
+      setPayeeCalls.push(args);
+      return { ok: true, txHash: TX };
+    };
+    const retried = await approvals.approve(id, SIG);
+
+    expect(retried).toMatchObject({ id, status: 'applied', txHash: TX });
+    expect(retried.error).toBeUndefined();
+    expect(setPayeeCalls).toHaveLength(2);
   });
 
   it('callers cannot change recorded state through returned objects', async () => {
