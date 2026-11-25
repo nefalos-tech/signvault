@@ -16,8 +16,14 @@ export class Approvals implements ApprovalsPort {
 
   constructor(private readonly chain: ChainPort, private readonly inbox: InboxPort) {}
 
+  /** A change that is already open (same payee and amount, not yet applied) is returned as it stands, with no second notice. */
   async request(to: Address, amount: bigint): Promise<PendingChange> {
     const { signvault } = await this.chain.readState();
+    // Checked after the await, so two requests in flight at once still make one row.
+    const open = [...this.changes.values()].find(
+      (c) => c.status !== 'applied' && c.to.toLowerCase() === to.toLowerCase() && c.amount === amount.toString(),
+    );
+    if (open) return { ...open };
     const change: PendingChange = { id: randomUUID(), to, amount: amount.toString(), nonce: signvault.nonce, status: 'pending' };
     this.changes.set(change.id, change);
     this.inbox.deliver({
@@ -45,6 +51,11 @@ export class Approvals implements ApprovalsPort {
       ? { id, to, amount, nonce, status: 'applied', txHash: result.txHash }
       : { id, to, amount, nonce, status: 'failed', txHash: result.txHash, error: result.error };
     this.changes.set(id, next);
+    // The vault's nonce went up by one, so every change still open now needs an approval over the new nonce.
+    if (result.ok) {
+      const newNonce = (BigInt(nonce) + 1n).toString();
+      for (const c of this.changes.values()) if (c.status !== 'applied') c.nonce = newNonce;
+    }
     return { ...next };
   }
 }
