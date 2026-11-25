@@ -55,7 +55,7 @@ You need the following.
 	4. It starts the server on port 8787 with `CHAIN=anvil`.
 	5. It starts the web app on port 3000. The first compile can take a minute or two.
 
-	The script prints a `Logs:` folder first. When everything is up, it prints these addresses and then follows the server's output.
+	The script prints a `Logs:` folder first. When everything is up, it prints these addresses and then follows the server's output. The output includes the line `../.env not found. Continuing without it.`, which comes from a `tsx` helper process. The server still reads `.env`.
 
 	| What | Address |
 	|---|---|
@@ -67,9 +67,9 @@ You need the following.
 5. Open http://localhost:3000 and click **Run the task**. Both agents get the same task, which is to pay every unpaid invoice in the inbox. The runs take about half a minute.
 
 	- The **Standard wallet** column shows the baseline agent ask for a higher daily limit, read the code that arrives by email, confirm the change, and pay all three vendors.
-	- The **SignVault** column shows the same agent pay Vendor 1, the only payee on the list. It cannot pay Vendor 2 or Vendor 3. It requests a change instead, and the change waits under **Pending changes** for the owner's signature. The agent often requests changes for both Vendor 2 and Vendor 3.
+	- The **SignVault** column shows the same agent pay Vendor 1, the only payee on the list. It cannot pay Vendor 2 or Vendor 3. If it tries, the vault refuses with `NotOnTheList`, shown in red. The agent requests a change instead, and the change waits under **Pending changes** for the owner's signature. The agent often requests changes for both Vendor 2 and Vendor 3.
 
-6. To stop, press Ctrl-C in the terminal. The script stops anvil, the server and the web app, and frees the three ports.
+6. To stop, press Ctrl-C in the terminal. The script stops anvil, the server and the web app, and frees the three ports. pnpm then prints `ELIFECYCLE Command failed.`, because the script was interrupted.
 
 **Reset** on the dashboard moves both agents to the next fresh wallet pair and refills the inbox. After 7 resets, the 8 pairs are used up. Stop the script and start it again for fresh pairs.
 
