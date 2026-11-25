@@ -55,7 +55,7 @@ You need the following.
 	4. It starts the server on port 8787 with `CHAIN=anvil`.
 	5. It starts the web app on port 3000. The first compile can take a minute or two.
 
-	The script prints a `Logs:` folder first. When everything is up, it prints these addresses and then follows the server's output. The output includes the line `../.env not found. Continuing without it.`, which comes from a `tsx` helper process. The server still reads `.env`.
+	The script prints a `Logs:` folder first. When everything is up, it prints these addresses and then follows the server's output. The output includes the line `../.env not found. Continuing without it.` The line is harmless. The server still reads `.env`.
 
 	| What | Address |
 	|---|---|
@@ -94,7 +94,7 @@ cast logs --rpc-url http://127.0.0.1:8545 --from-block 0 --address 0x9fE46736679
 
 After a **Reset**, the vault address is the next pair's `signVault` in [`deployments/31337.json`](deployments/31337.json).
 
-### Run it without a chain or a model
+### Two lighter ways to run it
 
 Two lighter modes need less setup.
 
