@@ -139,11 +139,14 @@ function ChangeCard(props: {
       {change.status === 'applied' && (
         <p className="text-lg text-green-700">
           Approved.{' '}
-          {change.txHash && (
-            <a className="underline" href={`${explorerUrl}/tx/${change.txHash}`} target="_blank" rel="noreferrer">
-              View the transaction
-            </a>
-          )}
+          {change.txHash &&
+            (explorerUrl ? (
+              <a className="underline" href={`${explorerUrl}/tx/${change.txHash}`} target="_blank" rel="noreferrer">
+                View the transaction
+              </a>
+            ) : (
+              <span className="block break-all font-mono text-sm text-neutral-500">{change.txHash}</span>
+            ))}
         </p>
       )}
       {change.status === 'failed' && <p className="text-lg text-red-700">Failed: {change.error ?? 'unknown error'}</p>}
