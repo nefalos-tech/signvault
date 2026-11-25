@@ -12,6 +12,7 @@
   "dependencies": {
     "@signvault/shared": "workspace:*",
     "next": "16.4.6",
+    "qrcode.react": "4.2.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "viem": "2.58.6"
