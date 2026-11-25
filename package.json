@@ -7,7 +7,9 @@
   },
   "scripts": {
     "typecheck": "pnpm -r typecheck",
-    "deploy:local": "cd contracts && OPERATOR_PRIVATE_KEY= AGENT_PRIVATE_KEY= AGENT_ADDRESS=0x70997970C51812dc3A010C7d01b50e0d17dc79C8 OWNER_ADDRESS=0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC PAIRS=8 forge script script/Deploy.s.sol --rpc-url anvil --broadcast --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+    "deploy:local": "cd contracts && OPERATOR_PRIVATE_KEY= AGENT_PRIVATE_KEY= AGENT_ADDRESS=0x70997970C51812dc3A010C7d01b50e0d17dc79C8 OWNER_ADDRESS=0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC PAIRS=8 forge script script/Deploy.s.sol --rpc-url anvil --broadcast --unlocked --sender 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+    "dev": "pnpm dev:server & pnpm -C web dev",
+    "dev:server": "pnpm -C server exec tsx --env-file-if-exists=../.env src/main.ts"
   },
   "devDependencies": {
     "@openzeppelin/contracts": "5.6.1",
