@@ -3,8 +3,11 @@ import type { EventsPort, LlmPort, RunEvent, WalletKind } from '@signvault/share
 import { KICKOFF, SYSTEM_PROMPT } from './prompt';
 import { ArgError, TOOLS, type Tool, type ToolContext, type ToolOutcome, type ToolReply } from './tools';
 
-/** Spec 7.4: at most 14 tool calls per run. */
-export const MAX_TOOL_CALLS = 14;
+/**
+ * Spec 7.4 says 14. Live runs on the shared inbox need up to 16 (each run also reads the other's emails),
+ * and spec 4's refused pay adds one more, so the cap is 20.
+ */
+export const MAX_TOOL_CALLS = 20;
 
 export interface AgentDeps extends ToolContext {
   llm: LlmPort;

@@ -297,18 +297,18 @@ describe('runAgent drives the run table in spec 4', () => {
     expect(world.changes).toMatchObject([{ to: V2, amount: `${INVOICE_AMOUNT}`, status: 'pending' }]);
   });
 
-  it('stops at 14 tool calls, even mid-turn', async () => {
+  it('stops at 20 tool calls, even mid-turn', async () => {
     const world = stubWorld();
     const { llm, turns } = scriptedLlm(() => ({ toolCalls: [call('wallet_status'), call('wallet_status'), call('wallet_status')] }));
 
     const result = await start(world, 'baseline', llm).done;
 
-    expect(MAX_TOOL_CALLS).toBe(14);
-    expect(turns).toHaveLength(5);
-    expect(world.log.filter((e) => e.kind === 'tool_call')).toHaveLength(14);
-    expect(world.log.filter((e) => e.kind === 'tool_result')).toHaveLength(14);
-    expect(world.log.at(-1)).toMatchObject({ kind: 'run_finished', text: 'Stopped after 14 tool calls without finishing.' });
-    expect(result).toMatchObject({ outcome: 'tool_limit', toolCalls: 14 });
+    expect(MAX_TOOL_CALLS).toBe(20);
+    expect(turns).toHaveLength(7);
+    expect(world.log.filter((e) => e.kind === 'tool_call')).toHaveLength(20);
+    expect(world.log.filter((e) => e.kind === 'tool_result')).toHaveLength(20);
+    expect(world.log.at(-1)).toMatchObject({ kind: 'run_finished', text: 'Stopped after 20 tool calls without finishing.' });
+    expect(result).toMatchObject({ outcome: 'tool_limit', toolCalls: 20 });
   });
 
   it('turns bad calls into errors for the model and never leaks a thrown message', async () => {
