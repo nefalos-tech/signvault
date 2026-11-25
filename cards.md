@@ -36,18 +36,21 @@ After C0, nine cards can run at once. The longest chain is C0 → K2 → K3 → 
 | 3 | Thu 12:00 | I2, D2, D3, D4 |
 | After | Thu afternoon | H1, H2, then T1 to T4 in order |
 
-## Suggested split for two people
+## The split
 
-- **On-chain lane:** K1 and K2 in parallel, then K3, S5, D1, W2.
-- **Off-chain lane:** X1 by hand, S1 to S4 in parallel, W1, then I1.
-- **Together:** I2, D2, D3, D4.
+- **Lane A, on-chain (fetalos):** C0 first. Then K1, K2, W2 and S5 at the same time, then K3, D1 and D2. After that, H2.
+- **Lane B, off-chain (kyusuku):** X1 now. Then S1 to S4, W1 and D4 at the same time, then I1, I2 and D3. After that, H1.
+- **By hand:** Q1 and D5.
+- I2, D2 and D3 need both of us at the keyboard. The lane that holds the card drives it.
+
+A lane is the set of issues assigned to that person on GitHub. `CLAUDE.md` has the rules every agent follows and the loop each lane's driver runs.
 
 ---
 
 ## Wave 0
 
 ### C0. Scaffold and freeze the interfaces
-Lane: shared · About 45 min · Blocked by: nothing · Blocks: every card except X1, Q1, D5
+Area: shared, lane A runs it first · About 45 min · Blocked by: nothing · Blocks: every card except X1, Q1, D5
 
 **Owns:** root config files, `shared/`, `contracts/foundry.toml`, `contracts/src/interfaces/`, `deployments/fake.json`, the `web/` scaffold, `web/fixtures/`, `server/package.json`, `server/tsconfig.json`.
 
@@ -65,7 +68,7 @@ Lane: shared · About 45 min · Blocked by: nothing · Blocks: every card except
 **Must not change:** nothing exists yet. After this merges, `shared/` and the interfaces are frozen.
 
 ### X1. Spike: will the model raise its own limit on cue?
-Lane: agent · About 90 min · Blocked by: nothing · Blocks: I1
+Area: agent · About 90 min · Blocked by: nothing · Blocks: I1
 
 **Owns:** `spike/`.
 
@@ -89,7 +92,7 @@ About 15 min tonight · Blocked by: nothing
 ## Wave 1 (all of these need only C0)
 
 ### K1. MockUSD and BaselineWallet
-Lane: contracts · About 45 min · Blocked by: C0 · Blocks: K3
+Area: contracts · About 45 min · Blocked by: C0 · Blocks: K3
 
 **Owns:** `contracts/src/MockUSD.sol`, `contracts/src/BaselineWallet.sol`, `contracts/test/BaselineWallet.t.sol`.
 
@@ -100,7 +103,7 @@ Lane: contracts · About 45 min · Blocked by: C0 · Blocks: K3
 **Must not change:** the interfaces, `shared/`.
 
 ### K2. SignVault
-Lane: contracts · About 90 min · Blocked by: C0 · Blocks: K3, H2, T1, T2
+Area: contracts · About 90 min · Blocked by: C0 · Blocks: K3, H2, T1, T2
 
 **Owns:** `contracts/src/SignVault.sol`, `contracts/test/SignVault.t.sol`.
 
@@ -111,7 +114,7 @@ Lane: contracts · About 90 min · Blocked by: C0 · Blocks: K3, H2, T1, T2
 **Must not change:** the interfaces, `shared/`.
 
 ### S1. Server shell: HTTP, events, inbox
-Lane: server · About 60 min · Blocked by: C0 · Blocks: I1
+Area: server · About 60 min · Blocked by: C0 · Blocks: I1
 
 **Owns:** `server/src/app.ts`, `server/src/inbox.ts`, `server/src/events.ts`, `server/test/app.test.ts`, `server/test/inbox.test.ts`.
 
@@ -122,7 +125,7 @@ Lane: server · About 60 min · Blocked by: C0 · Blocks: I1
 **Must not change:** `shared/`, other files in `server/src/`.
 
 ### S2. Fake chain
-Lane: server · About 45 min · Blocked by: C0 · Blocks: I1
+Area: server · About 45 min · Blocked by: C0 · Blocks: I1
 
 **Owns:** `server/src/chain/fake.ts`, `server/test/fake-chain.test.ts`.
 
@@ -133,7 +136,7 @@ Lane: server · About 45 min · Blocked by: C0 · Blocks: I1
 **Must not change:** `shared/`, other files in `server/src/`.
 
 ### S3. Wallet provider and approvals
-Lane: server · About 60 min · Blocked by: C0 · Blocks: I1
+Area: server · About 60 min · Blocked by: C0 · Blocks: I1
 
 **Owns:** `server/src/provider.ts`, `server/src/approvals.ts`, `server/test/provider.test.ts`, `server/test/approvals.test.ts`.
 
@@ -144,7 +147,7 @@ Lane: server · About 60 min · Blocked by: C0 · Blocks: I1
 **Must not change:** `shared/`, other files in `server/src/`.
 
 ### S4. Agent loop and tools
-Lane: server · About 90 min · Blocked by: C0 · Blocks: I1
+Area: server · About 90 min · Blocked by: C0 · Blocks: I1
 
 **Owns:** `server/src/agent/` and `server/test/agent.test.ts`.
 
@@ -155,7 +158,7 @@ Lane: server · About 90 min · Blocked by: C0 · Blocks: I1
 **Must not change:** `shared/`, other files in `server/src/`.
 
 ### S5. Real chain port (viem)
-Lane: server · About 60 min · Blocked by: C0 to write it, K3 to check it · Blocks: I2
+Area: server · About 60 min · Blocked by: C0 to write it, K3 to check it · Blocks: I2
 
 **Owns:** `server/src/chain/viem.ts`, `server/test/viem-chain.test.ts`.
 
@@ -166,7 +169,7 @@ Lane: server · About 60 min · Blocked by: C0 to write it, K3 to check it · Bl
 **Must not change:** `shared/`, other files in `server/src/`.
 
 ### W1. Dashboard
-Lane: web · About 2 h · Blocked by: C0 · Blocks: I2
+Area: web · About 2 h · Blocked by: C0 · Blocks: I2
 
 **Owns:** `web/app/page.tsx`, `web/components/`, `web/lib/` except `web/lib/approve.ts`, `web/next.config.*`.
 
@@ -177,7 +180,7 @@ Lane: web · About 2 h · Blocked by: C0 · Blocks: I2
 **Must not change:** `shared/`, `web/app/approve/`, `web/fixtures/`.
 
 ### W2. Phone approval page
-Lane: web · About 90 min · Blocked by: C0 · Blocks: I2, T1
+Area: web · About 90 min · Blocked by: C0 · Blocks: I2, T1
 
 **Owns:** `web/app/approve/`, `web/lib/approve.ts`, `web/lib/approve.test.ts`.
 
@@ -188,7 +191,7 @@ Lane: web · About 90 min · Blocked by: C0 · Blocks: I2, T1
 **Must not change:** `shared/`, the rest of `web/`.
 
 ### D4. README and clean-clone check
-Lane: docs · About 60 min · Blocked by: C0 to start, I2 to close
+Area: docs · About 60 min · Blocked by: C0 to start, I2 to close
 
 **Owns:** `README.md`, `LICENSE`, `.env.example`.
 
@@ -203,7 +206,7 @@ Lane: docs · About 60 min · Blocked by: C0 to start, I2 to close
 ## Wave 2
 
 ### K3. Deploy script and local deployment
-Lane: contracts · About 45 min · Blocked by: K1, K2 · Blocks: S5 check, I2, D1
+Area: contracts · About 45 min · Blocked by: K1, K2 · Blocks: S5 check, I2, D1
 
 **Owns:** `contracts/script/Deploy.s.sol`, `deployments/31337.json`, the root script `deploy:local`.
 
@@ -214,7 +217,7 @@ Lane: contracts · About 45 min · Blocked by: K1, K2 · Blocks: S5 check, I2, D
 **Must not change:** the contracts, the interfaces, `shared/`.
 
 ### I1. Wire the server and run it on the fake chain
-Lane: server · About 45 min · Blocked by: S1, S2, S3, S4, X1 · Blocks: I2
+Area: server · About 45 min · Blocked by: S1, S2, S3, S4, X1 · Blocks: I2
 
 **Owns:** `server/src/main.ts`, the root scripts `dev` and `dev:server`.
 
@@ -225,7 +228,7 @@ Lane: server · About 45 min · Blocked by: S1, S2, S3, S4, X1 · Blocks: I2
 **Must not change:** `shared/`. Fix bugs in S1 to S4 files in their own small pull requests.
 
 ### D1. Testnet deployment
-Lane: contracts · About 45 min · Blocked by: K3 · Blocks: D2
+Area: contracts · About 45 min · Blocked by: K3 · Blocks: D2
 
 **Owns:** `deployments/97.json`, the README section "Deployed addresses".
 
@@ -240,7 +243,7 @@ Lane: contracts · About 45 min · Blocked by: K3 · Blocks: D2
 ## Wave 3
 
 ### I2. Local end to end
-Lane: both of us · About 60 min · Blocked by: K3, S5, I1, W1, W2 · Blocks: D2, D4
+Area: both of us · About 60 min · Blocked by: K3, S5, I1, W1, W2 · Blocks: D2, D4
 
 **Owns:** `scripts/demo-local.sh`, the root script `demo:local`.
 
@@ -251,7 +254,7 @@ Lane: both of us · About 60 min · Blocked by: K3, S5, I1, W1, W2 · Blocks: D2
 **Must not change:** `shared/`. Bugs found here are fixed in the owning card's files.
 
 ### D2. Testnet run with a real phone
-Lane: both of us · About 60 min · Blocked by: I2, D1 · Blocks: D3
+Area: both of us · About 60 min · Blocked by: I2, D1 · Blocks: D3
 
 **Owns:** the README section "Run it on testnet".
 
@@ -260,7 +263,7 @@ Lane: both of us · About 60 min · Blocked by: I2, D1 · Blocks: D3
 **Done means:** checks 1 to 4 in spec 2 pass, and the explorer links for one full run are in the README.
 
 ### D3. Record the backup and refresh the fixtures
-Lane: both of us · About 30 min · Blocked by: D2
+Area: both of us · About 30 min · Blocked by: D2
 
 **Owns:** `web/fixtures/`, a screen recording file or link.
 
