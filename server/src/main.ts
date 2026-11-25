@@ -1,16 +1,19 @@
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
-import { formatUnits } from 'viem';
+import { formatUnits, type Account } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import {
   INVOICE_AMOUNT, MUSD_DECIMALS,
-  type ApprovalsPort, type ChainPort, type Email, type LlmPort, type ProviderPort, type WalletKind,
+  type Address, type ApprovalsPort, type ChainPort, type Email, type Hex, type LlmPort, type ProviderPort, type WalletKind,
 } from '@signvault/shared';
+import { loadDeployment } from '@signvault/shared/deployments';
 import { runAgent } from './agent/loop';
 import { createOpenAiLlm } from './agent/llm';
 import { createApp, type AppDeps } from './app';
 import { Approvals } from './approvals';
 import { FakeChain } from './chain/fake';
+import { createViemChain } from './chain/viem';
 import { MemoryEvents } from './events';
 import { COMPANY_INBOX, MemoryInbox } from './inbox';
 import { Provider } from './provider';
@@ -30,13 +33,43 @@ function invoiceEmails(vendors: { address: string }[]): Omit<Email, 'id' | 'ts'>
   }));
 }
 
-export function createChain(env: { CHAIN?: string }): ChainPort {
+type ChainEnv = Partial<Record<'CHAIN' | 'RPC_URL' | 'OPERATOR_PRIVATE_KEY' | 'AGENT_PRIVATE_KEY' | 'PAIR', string>>;
+
+/**
+ * CHAIN picks the port. On anvil the keys are optional: without them the node signs for the
+ * deployment's unlocked agent and operator. PAIR is the wallet pair to start on, so a testnet
+ * server can restart past the pairs it already used.
+ */
+export function createChain(env: ChainEnv): ChainPort {
   const chain = env.CHAIN || 'fake';
   if (chain === 'fake') return new FakeChain();
-  if (chain === 'anvil' || chain === 'bsctest') {
-    throw new Error(`CHAIN=${chain} needs the viem chain port from card S5 (server/src/chain/viem.ts), which is not on main yet. Use CHAIN=fake.`);
+  if (chain !== 'anvil' && chain !== 'bsctest') throw new Error(`CHAIN must be fake, anvil or bsctest, not "${chain}".`);
+
+  if (chain === 'bsctest') {
+    const missing = (['RPC_URL', 'OPERATOR_PRIVATE_KEY', 'AGENT_PRIVATE_KEY'] as const).filter((name) => !env[name]);
+    if (missing.length > 0) throw new Error(`CHAIN=bsctest needs ${missing.join(', ')}.`);
   }
-  throw new Error(`CHAIN must be fake, anvil or bsctest, not "${chain}".`);
+  const pair = Number(env.PAIR || 0);
+  if (!Number.isInteger(pair) || pair < 0) throw new Error(`PAIR must be a wallet pair index, not "${env.PAIR}".`);
+  const deployment = loadDeployment(chain === 'anvil' ? 31337 : 97);
+  return createViemChain({
+    rpcUrl: env.RPC_URL || 'http://127.0.0.1:8545',
+    deployment,
+    agent: signer('AGENT_PRIVATE_KEY', env, deployment.agent),
+    operator: signer('OPERATOR_PRIVATE_KEY', env, deployment.operator),
+    pair,
+  });
+}
+
+/** A key from env, or the unlocked address when it is unset. The error never repeats the key. */
+function signer(name: 'AGENT_PRIVATE_KEY' | 'OPERATOR_PRIVATE_KEY', env: ChainEnv, unlocked: Address): Account | Address {
+  const key = env[name];
+  if (!key) return unlocked;
+  try {
+    return privateKeyToAccount(key as Hex);
+  } catch {
+    throw new Error(`${name} is not a valid private key.`);
+  }
 }
 
 /**

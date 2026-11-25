@@ -112,9 +112,26 @@ describe('createChain', () => {
     expect(createChain({})).toBeInstanceOf(FakeChain);
   });
 
-  it('fails fast for anvil and bsctest until card S5 lands', () => {
-    expect(() => createChain({ CHAIN: 'anvil' })).toThrow(/S5/);
-    expect(() => createChain({ CHAIN: 'bsctest' })).toThrow(/S5/);
+  it('builds the viem chain for CHAIN=anvil from deployments/31337.json, with no keys needed', () => {
+    const chain = createChain({ CHAIN: 'anvil' });
+    expect(chain).not.toBeInstanceOf(FakeChain);
+    expect(typeof chain.readState).toBe('function');
+  });
+
+  it('starts on the wallet pair PAIR names, and refuses one the deployment lacks', () => {
+    expect(() => createChain({ CHAIN: 'anvil', PAIR: '7' })).not.toThrow();
+    expect(() => createChain({ CHAIN: 'anvil', PAIR: '8' })).toThrow(/no wallet pair 8/);
+    expect(() => createChain({ CHAIN: 'anvil', PAIR: 'two' })).toThrow(/PAIR/);
+  });
+
+  it('names a bad key without repeating it', () => {
+    const build = () => createChain({ CHAIN: 'anvil', AGENT_PRIVATE_KEY: '0xdeadbeef' });
+    expect(build).toThrow('AGENT_PRIVATE_KEY is not a valid private key.');
+  });
+
+  it('needs RPC_URL and both keys for CHAIN=bsctest', () => {
+    expect(() => createChain({ CHAIN: 'bsctest' })).toThrow(/RPC_URL, OPERATOR_PRIVATE_KEY, AGENT_PRIVATE_KEY/);
+    expect(() => createChain({ CHAIN: 'bsctest', RPC_URL: 'http://127.0.0.1:1', OPERATOR_PRIVATE_KEY: '0x01' })).toThrow(/AGENT_PRIVATE_KEY/);
   });
 
   it('refuses an unknown CHAIN', () => {
