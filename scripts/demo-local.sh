@@ -65,7 +65,7 @@ cleanup() {
   fi
   echo "Stopped. Logs are in $LOGS"
 }
-trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 0' INT
 trap 'cleanup; exit 143' TERM
 trap cleanup EXIT
 
