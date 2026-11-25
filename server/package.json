@@ -1,0 +1,22 @@
+{
+  "name": "@signvault/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.11",
+    "@signvault/shared": "workspace:*",
+    "hono": "4.13.22",
+    "openai": "7.64.0",
+    "viem": "2.58.6"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.7",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vitest": "5.1.2"
+  }
+}
