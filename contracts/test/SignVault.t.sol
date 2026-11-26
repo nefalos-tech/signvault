@@ -2,9 +2,31 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {ISignVault} from "../src/interfaces/ISignVault.sol";
 import {MockUSD} from "../src/MockUSD.sol";
 import {SignVault} from "../src/SignVault.sol";
+
+contract SecondKeyVault is SignVault {
+    address immutable secondKey;
+
+    constructor(
+        IERC20 cash_,
+        address owner_,
+        address agent_,
+        uint64 periodSeconds_,
+        Payee[] memory initial,
+        address key
+    ) SignVault(cash_, owner_, agent_, periodSeconds_, initial) {
+        secondKey = key;
+    }
+
+    function _isOwnerApproval(bytes32 digest, bytes calldata approval) internal view override returns (bool) {
+        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, approval);
+        return super._isOwnerApproval(digest, approval) || (err == ECDSA.RecoverError.NoError && signer == secondKey);
+    }
+}
 
 contract SignVaultTest is Test {
     uint256 constant AMOUNT = 10_000_000_000_000_000;
@@ -178,6 +200,25 @@ contract SignVaultTest is Test {
         vault.setPayee(vendor2, AMOUNT, forThisChain);
         vm.chainId(31337);
         vault.setPayee(vendor2, AMOUNT, forThisChain);
+    }
+
+    function test_ASubclassCanAddASecondApprovalPath() public {
+        (address second, uint256 secondKey) = makeAddrAndKey("second");
+        SecondKeyVault extended = new SecondKeyVault(cash, owner, agent, PERIOD, _vendor1Only(), second);
+
+        vm.expectRevert(abi.encodeWithSelector(ISignVault.OwnerApprovalRequired.selector));
+        extended.setPayee(vendor2, AMOUNT, hex"deadbeef");
+        vm.expectRevert(abi.encodeWithSelector(ISignVault.OwnerApprovalRequired.selector));
+        extended.setPayee(vendor2, AMOUNT, _sign(agentKey, address(extended), vendor2, AMOUNT, 0));
+
+        vm.expectEmit(address(extended));
+        emit ISignVault.PayeeSet(vendor2, AMOUNT, 0);
+        extended.setPayee(vendor2, AMOUNT, _sign(secondKey, address(extended), vendor2, AMOUNT, 0));
+        extended.setPayee(vendor3, AMOUNT, _sign(ownerKey, address(extended), vendor3, AMOUNT, 1));
+
+        assertEq(extended.amountOf(vendor2), AMOUNT);
+        assertEq(extended.amountOf(vendor3), AMOUNT);
+        assertEq(extended.nonce(), 2);
     }
 
     function _vendor1Only() internal view returns (ISignVault.Payee[] memory list) {
