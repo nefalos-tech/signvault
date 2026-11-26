@@ -33,12 +33,13 @@ function invoiceEmails(vendors: { address: string }[]): Omit<Email, 'id' | 'ts'>
   }));
 }
 
-type ChainEnv = Partial<Record<'CHAIN' | 'RPC_URL' | 'OPERATOR_PRIVATE_KEY' | 'AGENT_PRIVATE_KEY' | 'PAIR', string>>;
+type ChainEnv = Partial<Record<'CHAIN' | 'RPC_URL' | 'OPERATOR_PRIVATE_KEY' | 'AGENT_PRIVATE_KEY' | 'PAIR' | 'DEPLOYMENT', string>>;
 
 /**
  * CHAIN picks the port. On anvil the keys are optional: without them the node signs for the
  * deployment's unlocked agent and operator. PAIR is the wallet pair to start on, so a testnet
- * server can restart past the pairs it already used.
+ * server can restart past the pairs it already used. DEPLOYMENT names another file in deployments/
+ * for the same chain, such as `31337-passkey` from card T1's DeployPasskey.s.sol.
  */
 export function createChain(env: ChainEnv): ChainPort {
   const chain = env.CHAIN || 'fake';
@@ -51,7 +52,12 @@ export function createChain(env: ChainEnv): ChainPort {
   }
   const pair = Number(env.PAIR || 0);
   if (!Number.isInteger(pair) || pair < 0) throw new Error(`PAIR must be a wallet pair index, not "${env.PAIR}".`);
-  const deployment = loadDeployment(chain === 'anvil' ? 31337 : 97);
+  const chainId = chain === 'anvil' ? 31337 : 97;
+  // loadDeployment reads deployments/<which>.json, so any file name works there, though its type says number | 'fake'.
+  const deployment = loadDeployment((env.DEPLOYMENT || chainId) as number);
+  if (deployment.chainId !== chainId) {
+    throw new Error(`DEPLOYMENT ${env.DEPLOYMENT} is for chain ${deployment.chainId}, not ${chain} (${chainId}).`);
+  }
   return createViemChain({
     rpcUrl: env.RPC_URL || 'http://127.0.0.1:8545',
     deployment,
