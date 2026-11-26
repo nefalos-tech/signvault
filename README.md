@@ -287,7 +287,7 @@ You need the operator and agent keys from "Run it on testnet", the model key, `C
 2. Build and start the web app, and open the tunnel, as in steps 3 and 4 of "Run it on testnet".
 3. Open http://localhost:3000 and click **Run the treasury task**. While USDY's live price is within 1% of the redemption value, the agent sweeps the spare cash into T-bills and keeps the payroll still owed in cash. The testnet MockUSDY's redemption value is 1.1541 mUSD, set at deploy from USDY's value then. If USDY has moved more than 1% since, the agent trips on the live price instead.
 4. Switch on **Simulate a price shock** and click **Run the treasury task** again. The agent sees a price 10% under the live price, labelled "simulated price shock", and trips the wire. Every T-bill goes back to cash, and sweeping is locked.
-5. To re-arm, open `<that address>/rearm` in the MetaMask app's **Browser** tab on the phone. Tap **Re-arm** and sign the `Rearm` request with the owner account.
+5. To re-arm, open the tunnel's `https://….trycloudflare.com` address with `/rearm` on the end, in the MetaMask app's **Browser** tab on the phone. Tap **Re-arm** and sign the `Rearm` request with the owner account.
 
 ### The treasury deployment
 
@@ -324,7 +324,7 @@ Nobody re-armed the vault, so the trip is still in effect. Sweeping stays locked
 
 ### Verify the CoinMarketCap usage
 
-1. **The run feed.** Each `check_usdy_price` line on the dashboard names its source, `CoinMarketCap Pro API, USDY id 29256`, then gives the price in USD and CoinMarketCap's `last_updated` time. Without a key, the source reads `CoinMarketCap keyless public API, USDY id 29256`. A shocked price reads `simulated price shock`. Click **View raw treasury events** for the raw lines.
+1. **The run feed.** Under "Last treasury run" on the dashboard, each `check_usdy_price` line names its source, `CoinMarketCap Pro API, USDY id 29256`, then gives the price in USD and CoinMarketCap's `last_updated` time. Without a key, the source reads `CoinMarketCap keyless public API, USDY id 29256`. A shocked price reads `simulated price shock`. Click **View raw treasury events** for the raw lines.
 2. **The API logs.** Every Pro API call carries the team's key, so it shows in that key's usage in the CoinMarketCap developer portal.
 3. **On chain.** The chain does not store the price, but it shows what the agent did with it: the sweep and the trip above. The trip emits `Tripped(shares, assets)`, and the vault still reports it.
 
@@ -348,7 +348,7 @@ The agent key cannot do any of the following.
 - Withdraw funds or make a general transfer. SignVault has no function for either.
 - Change `owner` or `agent`. No function sets them after the constructor.
 - Re-arm a tripped vault without the owner's signature.
-- Move T-bills or their cash anywhere but the vault itself.
+- Send T-bill shares anywhere else. `sweep` and `redeem` always name the vault as receiver and owner.
 
 On a treasury vault, [`contracts/src/TripwireVault.sol`](contracts/src/TripwireVault.sol), the agent key can also call `sweep(assets)`, `redeem(shares)` and `trip()`. Any other caller gets `OnlyAgent`. A sweep that would leave less cash than `owedThisPeriod()` reverts with `SweepDipsIntoPayroll`, and a sweep after a trip reverts with `SweepLocked`. Anyone may relay `rearm(approval)`, but it applies only with the owner's EIP-712 signature over `Rearm(uint256 nonce)`. Without that signature, it reverts with `OwnerApprovalRequired`. It spends the same nonce as `setPayee`.
 
@@ -358,7 +358,7 @@ For comparison, the agent on `BaselineWallet` can pay anyone up to `dailyCap`. T
 
 ## What is real and what is mocked
 
-The demo uses this split, from section 13 of [`spec.md`](spec.md).
+The demo uses this split, from section 13 of [`spec.md`](spec.md), plus the treasury of cards T2 and T3.
 
 - Real: the contracts on BSC testnet, every transaction and refusal, the owner's signature and its on-chain check, and the model's decisions in a live run. USDY's price from CoinMarketCap is real and live.
 - Mocked: the token (mUSD has no value), the inbox (it lives in our server), the vendors, and the "wallet provider" for the baseline. The baseline provider is our own contract and server, written to mirror the study's setup. It is not Circle's product.
