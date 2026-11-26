@@ -1,0 +1,11 @@
+{
+  "chainId": 97,
+  "explorerUrl": "https://testnet.bscscan.com",
+  "addresses": {
+    "mockUsd": "0x1000000000000000000000000000000000000001",
+    "baselineWallet": "0x2000000000000000000000000000000000000001",
+    "signVault": "0x3000000000000000000000000000000000000001",
+    "owner": "0xF09f6Cd6a5a16fe9beaB7394eD41b6b1D394b937",
+    "agent": "0x6e7C7E06dB6EB2f53533f15F97b9919BB95C8Db1"
+  }
+}
