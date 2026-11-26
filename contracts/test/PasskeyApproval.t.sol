@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {PasskeyApproval} from "../src/PasskeyApproval.sol";
 import {PasskeyAssertion} from "./PasskeyAssertion.sol";
 
@@ -79,6 +80,26 @@ contract PasskeyApprovalTest is PasskeyAssertion {
             a.challengeIndex = indices[i];
             assertFalse(harness.isValid(DIGEST, encode(a), qx, qy));
         }
+    }
+
+    /// The signature does not cover the indexes. If a client ever let a second "challenge" key through unescaped,
+    /// an index pointing at it must not count: only the spec's fixed layout (type at 1, challenge at 23) does.
+    function test_AChallengeOutsideTheFixedLayoutIsRefused() public view {
+        bytes32 other = keccak256("the change the owner saw");
+        Assertion memory a = assertion(OWNER_PASSKEY, other, USER_PRESENT_AND_VERIFIED);
+        string memory head = string.concat(
+            '{"type":"webauthn.get","challenge":"',
+            Base64.encodeURL(abi.encodePacked(other)),
+            '","origin":"http://localhost:3000","crossOrigin":false,'
+        );
+        a.clientDataJSON =
+            string.concat(head, '"challenge":"', Base64.encodeURL(abi.encodePacked(DIGEST)), '"}');
+        a.challengeIndex = bytes(head).length;
+        signWith(OWNER_PASSKEY, a);
+        assertFalse(harness.isValid(DIGEST, encode(a), qx, qy));
+
+        a.challengeIndex = 23;
+        assertTrue(harness.isValid(other, encode(a), qx, qy));
     }
 
     function _withWord(bytes memory b, uint256 at, uint256 word) private pure returns (bytes memory out) {

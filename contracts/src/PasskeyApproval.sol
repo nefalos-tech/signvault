@@ -8,15 +8,18 @@ import {WebAuthn} from "@openzeppelin/contracts/utils/cryptography/WebAuthn.sol"
 ///
 /// `approval` is abi.encode(bytes32 r, bytes32 s, uint256 challengeIndex, uint256 typeIndex,
 /// bytes authenticatorData, string clientDataJSON), the layout WebAuthn.tryDecodeAuth reads. The assertion's
-/// challenge must be the digest itself, `s` must be at most n/2, and the user-verified flag must be set.
+/// challenge must be the digest itself, clientDataJSON must start {"type":"webauthn.get","challenge":"…
+/// (indexes 1 and 23), `s` must be at most n/2, and the user-verified flag must be set.
 library PasskeyApproval {
     /// True only for a valid assertion over `digest` by the key (qx, qy). Malformed bytes return false.
     function isValid(bytes32 digest, bytes calldata approval, bytes32 qx, bytes32 qy) internal view returns (bool) {
         (bool decoded, WebAuthn.WebAuthnAuth calldata auth) = WebAuthn.tryDecodeAuth(approval);
         if (!decoded) return false;
-        // WebAuthn.verify reads clientDataJSON at typeIndex in assembly without a bounds check, so an index far
-        // past the end runs out of gas instead of returning false.
-        if (auth.typeIndex >= bytes(auth.clientDataJSON).length) return false;
+        // The signature does not cover the indexes. WebAuthn serializes clientDataJSON with "type" first and
+        // "challenge" second, so for webauthn.get they start at 1 and 23. Pinning them means a later "challenge"
+        // key can never stand in for the real one. It also keeps a far index from WebAuthn.verify, which reads
+        // there in assembly without a bounds check and runs out of gas.
+        if (auth.typeIndex != 1 || auth.challengeIndex != 23) return false;
         return WebAuthn.verify(abi.encodePacked(digest), auth, qx, qy);
     }
 }

@@ -35,6 +35,11 @@ abstract contract PasskeyAssertion is Test {
         );
         a.typeIndex = 1;
         a.challengeIndex = 23;
+        signWith(key, a);
+    }
+
+    /// Signs whatever authenticatorData and clientDataJSON `a` holds, as the authenticator would.
+    function signWith(uint256 key, Assertion memory a) internal pure {
         bytes32 signed = sha256(abi.encodePacked(a.authenticatorData, sha256(bytes(a.clientDataJSON))));
         (a.r, a.s) = vm.signP256(key, signed);
         if (uint256(a.s) > P256_N / 2) a.s = bytes32(P256_N - uint256(a.s));
