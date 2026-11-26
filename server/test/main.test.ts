@@ -1,3 +1,4 @@
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { INVOICE_AMOUNT, type AppState, type LlmPort, type RunEvent } from '@signvault/shared';
 import { loadDeployment } from '@signvault/shared/deployments';
@@ -122,6 +123,20 @@ describe('createChain', () => {
     expect(() => createChain({ CHAIN: 'anvil', PAIR: '7' })).not.toThrow();
     expect(() => createChain({ CHAIN: 'anvil', PAIR: '8' })).toThrow(/no wallet pair 8/);
     expect(() => createChain({ CHAIN: 'anvil', PAIR: 'two' })).toThrow(/PAIR/);
+  });
+
+  it('reads deployments/<DEPLOYMENT>.json when DEPLOYMENT names one, and refuses one for another chain', () => {
+    const anvilFile = new URL('../../deployments/31337.json', import.meta.url);
+    const onePair = new URL('../../deployments/31337-vitest.json', import.meta.url);
+    const deployment = JSON.parse(readFileSync(anvilFile, 'utf8'));
+    writeFileSync(onePair, JSON.stringify({ ...deployment, pairs: deployment.pairs.slice(0, 1) }));
+    try {
+      expect(() => createChain({ CHAIN: 'anvil', DEPLOYMENT: '31337-vitest', PAIR: '0' })).not.toThrow();
+      expect(() => createChain({ CHAIN: 'anvil', DEPLOYMENT: '31337-vitest', PAIR: '1' })).toThrow(/no wallet pair 1: the deployment has 1/);
+    } finally {
+      rmSync(onePair);
+    }
+    expect(() => createChain({ CHAIN: 'anvil', DEPLOYMENT: 'fake' })).toThrow('DEPLOYMENT fake is for chain 97, not anvil (31337).');
   });
 
   it('names a bad key without repeating it', () => {
