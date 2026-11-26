@@ -67,12 +67,17 @@ contract SignVault is ISignVault, EIP712 {
     function setPayee(address to, uint256 amount, bytes calldata approval) external {
         uint256 signedNonce = nonce;
         bytes32 digest = _hashTypedDataV4(keccak256(abi.encode(SET_PAYEE_TYPEHASH, to, amount, signedNonce)));
-        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, approval);
-        if (err != ECDSA.RecoverError.NoError || signer != owner) revert OwnerApprovalRequired();
+        if (!_isOwnerApproval(digest, approval)) revert OwnerApprovalRequired();
 
         nonce = signedNonce + 1;
         _setPayee(to, amount);
         emit PayeeSet(to, amount, signedNonce);
+    }
+
+    /// The owner's approval check. A subclass may accept a second kind of approval.
+    function _isOwnerApproval(bytes32 digest, bytes calldata approval) internal view virtual returns (bool) {
+        (address signer, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, approval);
+        return err == ECDSA.RecoverError.NoError && signer == owner;
     }
 
     function _setPayee(address to, uint256 amount) private {
