@@ -237,7 +237,7 @@ export function vaultStory(events: RunEvent[], state: AppState | undefined): Col
   // it goes just before the first run that started after the request, or last.
   for (const c of changes.values()) {
     if (c.status !== 'applied') continue;
-    const step: Step = { kind: 'ok', icon: 'ok', title: `Owner signed on the phone: ${name(c.to)} added`, detail: 'PayeeSet, checked by the contract', ...(c.approvedAt !== undefined && { ts: c.approvedAt }), ...(c.txHash && { txHash: c.txHash }) };
+    const step: Step = { kind: 'ok', icon: 'ok', title: `Owner signed: ${name(c.to)} added`, detail: 'PayeeSet, checked by the contract', ...(c.approvedAt !== undefined && { ts: c.approvedAt }), ...(c.txHash && { txHash: c.txHash }) };
     const next = runStarts.find((r) => c.requestedAt !== undefined && r.ts > c.requestedAt);
     steps.push(at(c.approvedAt ?? (next ? next.ts - 0.5 : Infinity), step));
   }
@@ -269,7 +269,7 @@ export function vaultStory(events: RunEvent[], state: AppState | undefined): Col
       title: 'Unlisted vendors held for the owner',
       detail: [
         `${names([...changes.values()])} ${changes.size === 1 ? 'was' : 'were'} not on the list, so the agent asked the owner.`,
-        approved.length ? `The owner approved ${names(approved)} on the phone.` : '',
+        approved.length ? `The owner approved ${names(approved)}.` : '',
         waiting.length ? `${names(waiting)} ${waiting.length === 1 ? 'is' : 'are'} waiting.` : '',
       ].filter(Boolean).join(' '),
     }

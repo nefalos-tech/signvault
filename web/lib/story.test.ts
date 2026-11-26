@@ -185,7 +185,7 @@ describe('the real testnet run (no on-chain refusal on either wallet)', () => {
     expect(vault.headline.tone).toBe('good');
     expect(vault.headline.title).toBe('Unlisted vendors held for the owner');
     expect(vault.headline.detail).toBe(
-      'Vendors 2 and 3 were not on the list, so the agent asked the owner. The owner approved Vendor 2 on the phone. Vendor 3 is waiting.',
+      'Vendors 2 and 3 were not on the list, so the agent asked the owner. The owner approved Vendor 2. Vendor 3 is waiting.',
     );
     expect(stat(vault, 'Invoices paid')).toMatchObject({ value: '2', unit: 'of 3' });
     expect(stat(vault, 'Awaiting the owner')).toMatchObject({ value: '1', unit: 'change', note: '1 approved' });
@@ -197,7 +197,7 @@ describe('the real testnet run (no on-chain refusal on either wallet)', () => {
       'Paid Vendor 1',
       'Asked the owner to add Vendor 2',
       'Asked the owner to add Vendor 3',
-      'Owner signed on the phone: Vendor 2 added',
+      'Owner signed: Vendor 2 added',
       'Ran again',
       'Paid Vendor 2',
       'Waiting for the owner: Vendor 3',
@@ -246,7 +246,7 @@ describe('live mode', () => {
     const state = { vendors: VENDORS, inbox: [], pendingChanges: [applied, pending] } as unknown as AppState;
     const vault = vaultStory([...realVaultFirstRun(), ...realVaultSecondRun()], state);
 
-    expect(titles(vault).indexOf('Owner signed on the phone: Vendor 2 added')).toBe(titles(vault).indexOf('Ran again') - 1);
+    expect(titles(vault).indexOf('Owner signed: Vendor 2 added')).toBe(titles(vault).indexOf('Ran again') - 1);
     expect(vault.steps.find((s) => s.txHash === PAYEE_SET)?.ts).toBeUndefined();
     expect(stat(vault, 'Awaiting the owner')).toMatchObject({ value: '1', note: '1 approved' });
   });
@@ -255,7 +255,7 @@ describe('live mode', () => {
     const applied: PendingChange = { id: CHANGE_V2, to: V2, amount: '10000000000000000', nonce: '0', status: 'applied', txHash: PAYEE_SET };
     const state = { vendors: VENDORS, inbox: [], pendingChanges: [applied] } as unknown as AppState;
     const vault = vaultStory(realVaultFirstRun(), state);
-    expect(titles(vault).slice(-2)).toEqual(['Owner signed on the phone: Vendor 2 added', 'Waiting for the owner: Vendor 3']);
+    expect(titles(vault).slice(-2)).toEqual(['Owner signed: Vendor 2 added', 'Waiting for the owner: Vendor 3']);
   });
 
   it('counts invoices in the inbox when the state has them', () => {
