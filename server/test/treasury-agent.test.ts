@@ -128,6 +128,63 @@ describe('the treasury task', () => {
     expect(feed[2]).toEqual(['tool_result', 'No live USDY price is configured, so there is no split to act on. The redemption value is 1 mUSD.']);
   });
 
+  it('rounds the amounts in its feed lines to 4 decimals, and keeps them exact for the model', async () => {
+    const w = world();
+    const { feed, turns } = await play(w, [
+      () => ({ toolCalls: [call('sweep', { amount: '9.979999999999999999' })] }),
+      () => ({ toolCalls: [call('treasury_status')] }),
+    ]);
+    expect(feed.slice(1, 6)).toEqual([
+      ['tool_call', 'Sweeps 9.98 mUSD into T-bills.'],
+      ['tx_sent', 'Swept 9.98 mUSD into T-bills.'],
+      ['tool_result', 'The sweep went through.'],
+      ['tool_call', 'Checks the treasury.'],
+      ['tool_result', 'Cash 0.02 mUSD, 9.98 mUSD in T-bills, 0.01 mUSD of payroll still owed this period. Tripwire armed.'],
+    ]);
+    expect(JSON.parse(turns[2]!.messages.at(-1)!.content!)).toEqual({
+      cash: '0.020000000000000001', inTbills: '9.979999999999999999', payrollOwedThisPeriod: '0.01', spareCash: '0.010000000000000001', tripwire: 'armed',
+    });
+    expect((await w.chain.readState()).signvault.tbillValue).toBe('9979999999999999999');
+  });
+
+  it('rounds the refused amount in its feed line too', async () => {
+    const w = world();
+    const { feed } = await play(w, [() => ({ toolCalls: [call('sweep', { amount: '9.990000000000000001' })] })]);
+    expect(feed.slice(1, 3)).toEqual([
+      ['tool_call', 'Sweeps 9.99 mUSD into T-bills.'],
+      ['tx_refused', 'Refused: sweeping 9.99 mUSD would dip into the payroll still owed this period.'],
+    ]);
+  });
+
+  it('rounds the live price and the redemption value to 4 decimals in its feed line, and splits on the exact values', async () => {
+    const w = world();
+    w.prices = new PriceFeed(async () => ({ price: 1.15410633, lastUpdated: '2026-11-26T00:00:00Z' }));
+    const read = w.chain.readState.bind(w.chain);
+    w.chain.readState = async () => {
+      const s = await read();
+      s.signvault.tripwire = { ...s.signvault.tripwire!, redemptionValue: '1154400000000000001' };
+      return s;
+    };
+    const { feed, turns } = await play(w, [() => ({ toolCalls: [call('check_usdy_price')] })]);
+    expect(JSON.parse(turns[1]!.messages.at(-1)!.content!)).toEqual({
+      usdyPrice: '1.15410633', redemptionValue: '1.154400000000000001', splitPercent: '0.02', source: 'CoinMarketCap',
+      lastUpdated: '2026-11-26T00:00:00Z',
+    });
+    expect(feed[2]).toEqual(['tool_result', 'CoinMarketCap: 1.1541 USD at 2026-11-26T00:00:00Z, against a redemption value of 1.1544 mUSD: 0.02% apart.']);
+  });
+
+  it('rounds the redemption value when no live price is configured', async () => {
+    const w = world();
+    const read = w.chain.readState.bind(w.chain);
+    w.chain.readState = async () => {
+      const s = await read();
+      s.signvault.tripwire = { ...s.signvault.tripwire!, redemptionValue: '1154400000000000001' };
+      return s;
+    };
+    const { feed } = await play(w, [() => ({ toolCalls: [call('check_usdy_price')] })]);
+    expect(feed[2]).toEqual(['tool_result', 'No live USDY price is configured, so there is no split to act on. The redemption value is 1.1544 mUSD.']);
+  });
+
   it('on a vault with no treasury, every tool says so', async () => {
     const w = { ...world(), chain: new FakeChain() };
     const { feed } = await play(w, [() => ({ toolCalls: [call('treasury_status')] }), () => ({ toolCalls: [call('sweep', { amount: '1' })] })]);
