@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { baselineWalletAbi, mockUsdAbi, signVaultAbi } from '../src/abi';
+import { baselineWalletAbi, mockUsdAbi, mockUsdyAbi, signVaultAbi, tBillSignVaultAbi, tripwireVaultAbi } from '../src/abi';
 import { ATTACKER, ATTACKER_LABEL, labelKey, VENDOR_LABELS, VENDORS } from '../src/scenario';
 
 const contractsDir = new URL('../../contracts/', import.meta.url).pathname;
@@ -30,6 +30,20 @@ describe('abi.ts matches the Solidity sources', () => {
 
   it.skipIf(!existsSync(`${contractsDir}src/MockUSD.sol`))('MockUSD', () => {
     expect(normalize(mockUsdAbi)).toEqual(normalize(forgeAbi('MockUSD')));
+  });
+
+  it('MockUSDY', () => {
+    expect(normalize(mockUsdyAbi)).toEqual(normalize(forgeAbi('MockUSDY')));
+  });
+
+  // The T-bill entries sit on top of signVaultAbi, so each must be in the contract, not the whole contract in them.
+  it('TBillSignVault has every entry of tBillSignVaultAbi', () => {
+    expect(normalize(forgeAbi('TBillSignVault'))).toEqual(expect.arrayContaining(normalize(tBillSignVaultAbi)));
+  });
+
+  // Card T3: the interface posted on #25, checked once fetalos's TripwireVault.sol is on main.
+  it.skipIf(!existsSync(`${contractsDir}src/TripwireVault.sol`))('TripwireVault has every entry of tripwireVaultAbi', () => {
+    expect(normalize(forgeAbi('TripwireVault'))).toEqual(expect.arrayContaining(normalize(tripwireVaultAbi)));
   });
 });
 

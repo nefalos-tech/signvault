@@ -22,10 +22,17 @@ export interface RunEvent {
 
 export interface AppState {
   chainId: number; explorerUrl: string;
-  addresses: { mockUsd: Address; baselineWallet: Address; signVault: Address; owner: Address; agent: Address };
+  addresses: { mockUsd: Address; baselineWallet: Address; signVault: Address; owner: Address; agent: Address; mockUsdy?: Address };
   vendors: { name: string; address: Address }[];
   baseline: { balance: string; dailyCap: string; spentToday: string };
-  signvault: { balance: string; nonce: string; payees: { to: Address; amount: string; paidThisPeriod: boolean }[] };
+  signvault: {
+    balance: string; nonce: string; payees: { to: Address; amount: string; paidThisPeriod: boolean }[];
+    // Cards T2 and T3 (#57), set only on a treasury deployment. Decimal wei strings; tbillValue is convertToAssets(tbillShares).
+    tbillShares?: string; tbillValue?: string; owedThisPeriod?: string;
+    // Set only when the vault is a TripwireVault. usdyPrice and redemptionValue are mUSD wei per whole mUSDY (1e18 shares):
+    // usdyPrice is the price the agent sees, null with no live price; simulated is true while a test price shock is on.
+    tripwire?: { tripped: boolean; usdyPrice: string | null; redemptionValue: string; simulated: boolean };
+  };
   pendingChanges: PendingChange[];
   inbox: Email[];
 }

@@ -36,6 +36,10 @@ function setup() {
     vaultPay: unused,
     vaultSetPayee: unused,
     nextPair: unused,
+    vaultSweep: unused,
+    vaultRedeem: unused,
+    vaultTrip: unused,
+    vaultRearm: unused,
   } satisfies ChainPort;
 
   const changes: PendingChange[] = [

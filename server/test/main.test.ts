@@ -113,6 +113,11 @@ describe('createChain', () => {
     expect(createChain({})).toBeInstanceOf(FakeChain);
   });
 
+  it('gives the fake vault a treasury only with DEPLOYMENT=fake-treasury', async () => {
+    expect((await createChain({ CHAIN: 'fake' }).readState()).signvault).not.toHaveProperty('tbillShares');
+    expect((await createChain({ CHAIN: 'fake', DEPLOYMENT: 'fake-treasury' }).readState()).signvault).toMatchObject({ tbillShares: '0' });
+  });
+
   it('builds the viem chain for CHAIN=anvil from deployments/31337.json, with no keys needed', () => {
     const chain = createChain({ CHAIN: 'anvil' });
     expect(chain).not.toBeInstanceOf(FakeChain);

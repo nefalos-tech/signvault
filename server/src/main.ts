@@ -39,11 +39,12 @@ type ChainEnv = Partial<Record<'CHAIN' | 'RPC_URL' | 'OPERATOR_PRIVATE_KEY' | 'A
  * CHAIN picks the port. On anvil the keys are optional: without them the node signs for the
  * deployment's unlocked agent and operator. PAIR is the wallet pair to start on, so a testnet
  * server can restart past the pairs it already used. DEPLOYMENT names another file in deployments/
- * for the same chain, such as `31337-passkey` from card T1's DeployPasskey.s.sol.
+ * for the same chain, such as `31337-passkey` from card T1's DeployPasskey.s.sol. With CHAIN=fake,
+ * DEPLOYMENT=fake-treasury gives each vault the T-bill sleeve and tripwire of cards T2 and T3.
  */
 export function createChain(env: ChainEnv): ChainPort {
   const chain = env.CHAIN || 'fake';
-  if (chain === 'fake') return new FakeChain();
+  if (chain === 'fake') return new FakeChain({ treasury: env.DEPLOYMENT === 'fake-treasury' });
   if (chain !== 'anvil' && chain !== 'bsctest') throw new Error(`CHAIN must be fake, anvil or bsctest, not "${chain}".`);
 
   if (chain === 'bsctest') {
