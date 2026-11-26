@@ -1,4 +1,5 @@
-import type { AppState, TxResult } from '@signvault/shared';
+import { formatUnits } from 'viem';
+import { MUSD_DECIMALS, type AppState, type TxResult } from '@signvault/shared';
 import type { PriceFeed } from '../price/feed';
 import type { AgentTask } from './loop';
 import { amount, fields, finish, musd, params, type Tool, type ToolReply } from './tools';
@@ -61,7 +62,7 @@ const status: Tool = {
       };
       return {
         result,
-        text: `Cash ${result.cash} mUSD, ${result.inTbills} mUSD in T-bills, ${result.payrollOwedThisPeriod} mUSD of payroll still owed this period. `
+        text: `Cash ${shown(s.balance)} mUSD, ${shown(s.tbillValue)} mUSD in T-bills, ${shown(s.owedThisPeriod)} mUSD of payroll still owed this period. `
           + `Tripwire ${s.tripwire === undefined ? 'not on this vault' : s.tripwire.tripped ? 'tripped' : 'armed'}.`,
       };
     },
@@ -75,9 +76,9 @@ const sweep: Tool = {
   prepare: (args, ctx) => {
     const value = amount(fields(args).amount, 'amount');
     return {
-      text: `Sweeps ${musd(value)} mUSD into T-bills.`,
-      run: async () => settle(await ctx.chain.vaultSweep(value), `sweeping ${musd(value)} mUSD`, {
-        tx: `Swept ${musd(value)} mUSD into T-bills.`,
+      text: `Sweeps ${shown(value)} mUSD into T-bills.`,
+      run: async () => settle(await ctx.chain.vaultSweep(value), `sweeping ${shown(value)} mUSD`, {
+        tx: `Swept ${shown(value)} mUSD into T-bills.`,
         result: 'The sweep went through.',
       }),
     };
@@ -91,7 +92,7 @@ const redeem: Tool = {
   prepare: (args, ctx) => {
     const value = amount(fields(args).amount, 'amount');
     return {
-      text: `Redeems ${musd(value)} mUSD of T-bills.`,
+      text: `Redeems ${shown(value)} mUSD of T-bills.`,
       run: async () => {
         const s = sleeve((await ctx.chain.readState()).signvault);
         if (!s) return NO_TREASURY;
@@ -99,8 +100,8 @@ const redeem: Tool = {
         const held = BigInt(s.tbillShares);
         const worth = BigInt(s.tbillValue);
         const shares = worth === 0n ? held + 1n : min(held, (value * held + worth - 1n) / worth);
-        return settle(await ctx.chain.vaultRedeem(shares), `redeeming ${musd(value)} mUSD`, {
-          tx: `Redeemed ${musd(value)} mUSD of T-bills to cash.`,
+        return settle(await ctx.chain.vaultRedeem(shares), `redeeming ${shown(value)} mUSD`, {
+          tx: `Redeemed ${shown(value)} mUSD of T-bills to cash.`,
           result: 'The redemption went through.',
         });
       },
@@ -125,16 +126,18 @@ function checkPrice(prices: PriceFeed, live: string): Tool {
         const quote = await prices.quote(nav);
         const source = quote.simulated ? 'simulated price shock' : quote.price === null && !quote.error ? 'no live price configured' : live;
         const split = quote.price === null ? null : splitPercent(quote.price, nav);
+        // The model's result keeps exact values; the feed text shows them rounded with shown().
         const result = {
           usdyPrice: quote.price === null ? null : musd(quote.price), redemptionValue: musd(nav), splitPercent: split, source,
           ...(quote.lastUpdated && { lastUpdated: quote.lastUpdated }), ...(quote.error && { error: quote.error }),
         };
-        const against = `against a redemption value of ${result.redemptionValue} mUSD: ${split}% apart.`;
+        const nav4 = shown(nav);
+        const against = `against a redemption value of ${nav4} mUSD: ${split}% apart.`;
         let text: string;
-        if (quote.error) text = `The live USDY price is unavailable (${live}: ${quote.error}), so there is no split to act on. The redemption value is ${result.redemptionValue} mUSD.`;
-        else if (result.usdyPrice === null) text = `No live USDY price is configured, so there is no split to act on. The redemption value is ${result.redemptionValue} mUSD.`;
-        else if (quote.simulated) text = `USDY at ${result.usdyPrice} mUSD (${source}) ${against}`;
-        else text = `${live}: ${result.usdyPrice} USD${quote.lastUpdated ? ` at ${quote.lastUpdated}` : ''}, ${against}`;
+        if (quote.error) text = `The live USDY price is unavailable (${live}: ${quote.error}), so there is no split to act on. The redemption value is ${nav4} mUSD.`;
+        else if (quote.price === null) text = `No live USDY price is configured, so there is no split to act on. The redemption value is ${nav4} mUSD.`;
+        else if (quote.simulated) text = `USDY at ${shown(quote.price)} mUSD (${source}) ${against}`;
+        else text = `${live}: ${shown(quote.price)} USD${quote.lastUpdated ? ` at ${quote.lastUpdated}` : ''}, ${against}`;
         return { result, text };
       },
     }),
@@ -161,6 +164,12 @@ function splitPercent(price: bigint, nav: bigint): string {
 }
 
 const min = (a: bigint, b: bigint) => (a < b ? a : b);
+
+const SHOWN_DECIMALS = 4;
+const STEP = 10n ** BigInt(MUSD_DECIMALS - SHOWN_DECIMALS);
+
+/** A non-negative amount for a feed line, rounded half up to 4 decimals. The model's `result` keeps the exact `musd` value. */
+const shown = (wei: bigint | string) => formatUnits((BigInt(wei) + STEP / 2n) / STEP, SHOWN_DECIMALS);
 
 /** `priceSource` names where the live price comes from, such as `CoinMarketCap Pro API, USDY id 29256`, for the feed. */
 export function treasuryTask(prices: PriceFeed, priceSource = 'CoinMarketCap'): AgentTask {
