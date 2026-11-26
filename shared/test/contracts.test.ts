@@ -36,13 +36,12 @@ describe('abi.ts matches the Solidity sources', () => {
     expect(normalize(mockUsdyAbi)).toEqual(normalize(forgeAbi('MockUSDY')));
   });
 
-  // The T-bill entries sit on top of signVaultAbi, so each must be in the contract, not the whole contract in them.
+  // These two ABIs hold only what each contract adds to the one below it, so each entry must be in the contract.
   it('TBillSignVault has every entry of tBillSignVaultAbi', () => {
     expect(normalize(forgeAbi('TBillSignVault'))).toEqual(expect.arrayContaining(normalize(tBillSignVaultAbi)));
   });
 
-  // Card T3: the interface posted on #25, checked once fetalos's TripwireVault.sol is on main.
-  it.skipIf(!existsSync(`${contractsDir}src/TripwireVault.sol`))('TripwireVault has every entry of tripwireVaultAbi', () => {
+  it('TripwireVault has every entry of tripwireVaultAbi', () => {
     expect(normalize(forgeAbi('TripwireVault'))).toEqual(expect.arrayContaining(normalize(tripwireVaultAbi)));
   });
 });

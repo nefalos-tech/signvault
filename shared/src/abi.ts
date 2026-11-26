@@ -1500,17 +1500,84 @@ export const mockUsdyAbi = [
   }
 ] as const;
 
-// Card T3: what TripwireVault adds, as posted on #25. Typed by hand until TripwireVault.sol is on main;
-// shared/test/contracts.test.ts checks every entry against it from then on.
+// Card T3: what TripwireVault adds to TBillSignVault (#69).
+
 export const tripwireVaultAbi = [
-  { type: 'function', name: 'REARM_TYPEHASH', inputs: [], outputs: [{ name: '', type: 'bytes32' }], stateMutability: 'view' },
-  { type: 'function', name: 'rearm', inputs: [{ name: 'approval', type: 'bytes' }], outputs: [], stateMutability: 'nonpayable' },
-  { type: 'function', name: 'trip', inputs: [], outputs: [], stateMutability: 'nonpayable' },
-  { type: 'function', name: 'tripped', inputs: [], outputs: [{ name: '', type: 'bool' }], stateMutability: 'view' },
-  { type: 'event', name: 'Rearmed', inputs: [{ name: 'nonce', type: 'uint256', indexed: false }], anonymous: false },
   {
-    type: 'event', name: 'Tripped', anonymous: false,
-    inputs: [{ name: 'shares', type: 'uint256', indexed: false }, { name: 'assets', type: 'uint256', indexed: false }],
+    "type": "function",
+    "name": "REARM_TYPEHASH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view"
   },
-  { type: 'error', name: 'SweepLocked', inputs: [] },
+  {
+    "type": "function",
+    "name": "rearm",
+    "inputs": [
+      {
+        "name": "approval",
+        "type": "bytes"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "trip",
+    "inputs": [],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "tripped",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "event",
+    "name": "Rearmed",
+    "inputs": [
+      {
+        "name": "nonce",
+        "type": "uint256",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "Tripped",
+    "inputs": [
+      {
+        "name": "shares",
+        "type": "uint256",
+        "indexed": false
+      },
+      {
+        "name": "assets",
+        "type": "uint256",
+        "indexed": false
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "SweepLocked",
+    "inputs": []
+  }
 ] as const;
