@@ -22,9 +22,13 @@ export interface AppDeps {
   rearm(signature: Hex): Promise<TxResult>;
   /** Moves to the next wallet pair, clears the inbox and seeds the three invoices. */
   reset(): Promise<void>;
+  /** How often GET /api/events writes a comment while nothing else happens. Defaults to 15 s. */
+  heartbeatMs?: number;
 }
 
 const REPLAY = 200;
+/** The web app's Next proxy and the Cloudflare tunnel close a stream that sends no bytes for 30 s. */
+const HEARTBEAT_MS = 15_000;
 const RUN_WALLETS: readonly string[] = ['baseline', 'signvault', 'both'] satisfies RunWallet[];
 const RUN_TASKS: readonly string[] = ['payroll', 'treasury'] satisfies RunTask[];
 const HEX = /^0x[0-9a-fA-F]+$/;
@@ -38,7 +42,7 @@ async function readJson(req: { json(): Promise<unknown> }): Promise<Record<strin
 }
 
 export function createApp(deps: AppDeps) {
-  const { chain, inbox, events, approvals, prices } = deps;
+  const { chain, inbox, events, approvals, prices, heartbeatMs = HEARTBEAT_MS } = deps;
 
   const buildState = async (): Promise<AppState> => {
     const state = await chain.readState();
@@ -59,15 +63,24 @@ export function createApp(deps: AppDeps) {
 
   app.get('/events', (c) =>
     streamSSE(c, async (stream) => {
-      // Take the backlog and subscribe in the same tick, so no event falls between them.
+      // One chain, so frames never interleave.
       let writes = Promise.resolve();
-      const send = (e: RunEvent) => {
-        writes = writes.then(() => stream.writeSSE({ id: e.id, data: toJson(e) }));
+      const enqueue = (write: () => Promise<unknown>) => {
+        writes = writes.then(write).then(
+          () => {},
+          (err: unknown) => console.error('GET /api/events dropped a frame:', err),
+        );
       };
+      const send = (e: RunEvent) => enqueue(() => stream.writeSSE({ id: e.id, data: toJson(e) }));
+      // The proxy sends no headers until the first byte, so open with a comment. EventSource fires nothing for one.
+      enqueue(() => stream.write(': connected\n\n'));
+      // Take the backlog and subscribe in the same tick, so no event falls between them.
       events.recent(REPLAY).forEach(send);
       const unsubscribe = events.subscribe(send);
+      const heartbeat = setInterval(() => enqueue(() => stream.write(': ping\n\n')), heartbeatMs);
       await new Promise<void>((resolve) =>
         stream.onAbort(() => {
+          clearInterval(heartbeat);
           unsubscribe();
           resolve();
         }),
