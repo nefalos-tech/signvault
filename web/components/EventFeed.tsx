@@ -35,10 +35,10 @@ export function EventFeed({ events, explorerUrl }: { events: RunEvent[]; explore
   }, [events.length]);
 
   if (events.length === 0) {
-    return <p className="h-[28rem] px-4 py-6 text-sm text-neutral-500">No run yet.</p>;
+    return <p className="px-4 py-4 text-sm text-faint">No events yet.</p>;
   }
   return (
-    <ol ref={list} className="flex h-[28rem] flex-col gap-1 overflow-y-auto px-4 py-3 text-sm">
+    <ol ref={list} className="flex max-h-[28rem] flex-col gap-1 overflow-y-auto px-3 py-3 text-sm">
       {events.map((e) => (
         <li
           key={e.id}
