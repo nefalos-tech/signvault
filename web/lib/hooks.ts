@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { AppState, RunEvent } from '@signvault/shared';
+import type { AppState, RunEvent, WalletKind } from '@signvault/shared';
 import baselineRun from '../fixtures/baseline-run.json';
 import signvaultRun from '../fixtures/signvault-run.json';
 import { replayLength, visibleEvents } from './player';
@@ -103,6 +103,11 @@ async function getJson<T>(path: string): Promise<T> {
   const res = await fetch(path, { cache: 'no-store' });
   if (!res.ok) throw new Error(`${path} answered ${res.status}`);
   return res.json();
+}
+
+/** Starts a run on one wallet or both (spec 7.3). The SignVault-only run is the one after the owner approves. */
+export function startRun(wallet: WalletKind | 'both'): Promise<{ runIds: string[] }> {
+  return postJson('/api/runs', { wallet });
 }
 
 export async function postJson<T>(path: string, body: unknown): Promise<T> {
