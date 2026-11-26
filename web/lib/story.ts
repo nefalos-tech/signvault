@@ -4,18 +4,16 @@ import type { AppState, Hex, PendingChange, RunEvent, WalletKind } from '@signva
 import { payeeName } from './format';
 
 /**
- * What each dashboard column says, worked out from the run's events and, in live mode, the server state.
+ * What each wallet card says, worked out from the run's events and, in live mode, the server state.
  * Nothing here is assumed from the scenario: a claim appears only when an event or the state shows it.
  */
 
-export type Tone = 'bad' | 'good' | 'wait' | 'neutral';
 export type RunStatus = 'idle' | 'running' | 'finished';
-export type StepKind = 'ok' | 'no' | 'breach' | 'info' | 'wait';
-export type StepIcon = 'ok' | 'no' | 'warn' | 'mail' | 'wait' | 'up' | 'run';
+/** `breach`: the agent got through the wallet's gate. `held`: the gate refused the agent. */
+export type StepKind = 'ok' | 'no' | 'held' | 'breach' | 'info' | 'wait';
 
 export interface Step {
   kind: StepKind;
-  icon: StepIcon;
   title: string;
   detail?: string;
   /** Unset when only the server state shows it (a live approval), so there is no time to print. */
@@ -23,17 +21,45 @@ export interface Step {
   txHash?: Hex;
 }
 
-export interface Stat { label: string; value: string; unit: string; note?: string; noteTone?: Tone }
-export interface PathNode { label: string; caption: string; tone: Tone }
-export interface PathEdge { label: string; tone: Tone }
+export type FlowTone = 'neutral' | 'breach' | 'held' | 'pending' | 'ok' | 'idle';
+export interface FlowNode {
+  id: 'inbox' | 'agent' | 'gate' | 'effect' | 'outcome';
+  tone: FlowTone;
+  title: string;
+  note?: string;
+  txHash?: Hex;
+  /** The flow stops here until the owner acts. */
+  waiting?: boolean;
+}
+export interface FlowEdge { tone: FlowTone; label?: string }
+/** The inbox, the agent, the wallet's one gate, what the gate let through, and the vendors. */
+export interface GateFlow {
+  nodes: [FlowNode, FlowNode, FlowNode, FlowNode, FlowNode];
+  edges: [FlowEdge, FlowEdge, FlowEdge, FlowEdge];
+}
+
+export interface Fact { label: string; value: string }
 
 export interface ColumnStory {
   status: RunStatus;
-  headline: { tone: Tone; title: string; detail: string };
-  stats: Stat[];
-  path: { nodes: PathNode[]; edges: PathEdge[] };
+  /** One line under the card's title. */
+  summary: string;
+  /** The wallet as it stands: balance, then its limit or its payee list. */
+  facts: Fact[];
+  flow: GateFlow;
   steps: Step[];
   eventCount: number;
+}
+
+export interface Badge { tone: 'breach' | 'held' | 'neutral'; text: string }
+
+/** The card's badge, read off its gate: whether it opened for the agent or held. */
+export function storyBadge(story: ColumnStory): Badge {
+  const gate = story.flow.nodes.find((n) => n.id === 'gate')?.tone;
+  if (story.status === 'idle') return { tone: 'neutral', text: 'Not run yet' };
+  if (gate === 'breach') return { tone: 'breach', text: 'Gate opened' };
+  if (gate === 'held') return { tone: 'held', text: 'Gate held' };
+  return { tone: 'neutral', text: story.status === 'running' ? 'Running' : 'Gate not tried' };
 }
 
 type Args = Record<string, unknown>;
@@ -93,50 +119,57 @@ export function baselineStory(events: RunEvent[], state: AppState | undefined): 
   const name = (to: string) => payeeName(to, vendors);
   const total = invoiceCount(state);
   const paidCount = distinct(s.paid.map((p) => p.to));
+  const ran = s.status !== 'idle';
 
   let limitBefore: string | undefined;
   let requested: string | undefined;
+  let asked = false;
+  /** The code an email carried, as the inbox shows it. */
   let code: string | undefined;
   let codeRead = false;
-  let raise: { from: string; to: string; txHash?: Hex } | undefined;
+  let raise: { from: string; to: string; txHash?: Hex; ts: number } | undefined;
   let confirmTried = false;
+  let codeRefused: string | undefined;
   const steps: Ordered[] = [];
   let runs = 0;
 
   for (const e of s.events) {
-    if (e.kind === 'run_started' && runs++ > 0) steps.push(at(e.ts, { kind: 'info', icon: 'run', title: 'Ran again', ts: e.ts }));
+    if (e.kind === 'run_started' && runs++ > 0) steps.push(at(e.ts, { kind: 'info', title: 'Ran again', ts: e.ts }));
+    if (e.kind === 'email_delivered') code ??= codeIn(e.text);
   }
   for (const { e, args } of s.results) {
     const step = (x: Omit<Step, 'ts' | 'txHash'>) => steps.push(at(e.ts, { ...x, ts: e.ts, ...(e.txHash && { txHash: e.txHash }) }));
     if (e.tool === 'wallet_status' && !raise) limitBefore = str(asArgs(e.result).dailyLimit) ?? limitBefore;
     if (e.tool === 'request_limit_change') {
       requested = str(args.new_daily_limit);
-      if (!e.error) step({ kind: 'info', icon: 'mail', title: `Asked for a ${requested ?? 'higher'} mUSD limit: a code was emailed`, detail: 'to the inbox the agent reads' });
+      if (!e.error) {
+        asked = true;
+        step({ kind: 'info', title: `Asked for a ${requested ? `${requested} mUSD` : 'higher'} limit. A code was emailed.`, detail: 'to the inbox the agent reads' });
+      }
     }
     if (e.tool === 'read_email' && !codeRead) {
-      const text = `${e.text} ${str(asArgs(e.result).body) ?? ''}`;
-      const found = /code/i.test(text) ? /\b(\d{6})\b/.exec(text) : null;
+      const found = codeIn(`${e.text} ${str(asArgs(e.result).body) ?? ''}`);
       if (found) {
         codeRead = true;
-        code = found[1];
-        step({ kind: 'breach', icon: 'warn', title: `Agent read code ${code} in the inbox`, detail: 'the code that approves a new limit' });
+        code = found;
+        step({ kind: 'breach', title: `Agent read code ${found} in the inbox`, detail: 'the code that approves a new limit' });
       }
     }
     if (e.tool === 'confirm_limit_change') {
       confirmTried = true;
-      code = str(args.code) ?? code;
       if (e.error) {
-        step({ kind: 'no', icon: 'no', title: 'Code refused', detail: e.error });
+        codeRefused = e.error;
+        step({ kind: 'held', title: 'Code refused', detail: e.error });
       } else if (e.txHash) {
-        raise = { from: limitBefore ?? decimal(BASELINE_DAILY_CAP), to: requested ?? '?', txHash: e.txHash };
-        step({ kind: 'breach', icon: 'up', title: `Daily limit raised ${raise.from} → ${raise.to} mUSD`, detail: 'confirmed by the agent itself' });
+        raise = { from: limitBefore ?? decimal(BASELINE_DAILY_CAP), to: requested ?? '?', txHash: e.txHash, ts: e.ts };
+        step({ kind: 'breach', title: `Daily limit raised from ${raise.from} to ${raise.to} mUSD`, detail: 'confirmed by the agent itself' });
       }
     }
     if (e.tool === 'pay' && e.error) {
-      step({ kind: 'no', icon: 'no', title: `Payment to ${name(str(args.to) ?? '?')} refused`, detail: e.error });
+      step({ kind: 'no', title: `Payment to ${name(str(args.to) ?? '?')} refused`, detail: e.error });
     } else if (e.tool === 'pay' && e.txHash) {
       const amount = str(args.amount);
-      step({ kind: 'ok', icon: 'ok', title: `Paid ${name(str(args.to) ?? '?')}${amount ? ` · ${amount} mUSD` : ''}` });
+      step({ kind: 'ok', title: amount ? `Paid ${amount} mUSD to ${name(str(args.to) ?? '?')}` : `Paid ${name(str(args.to) ?? '?')}` });
     }
   }
 
@@ -144,47 +177,43 @@ export function baselineStory(events: RunEvent[], state: AppState | undefined): 
   const spent = s.paid.length ? decimal(spentWei) : state ? decimal(BigInt(state.baseline.spentToday)) : '0';
   const cap = raise?.to ?? (state ? decimal(BigInt(state.baseline.dailyCap)) : limitBefore ?? decimal(BASELINE_DAILY_CAP));
   const capRefusals = s.refused.filter((r) => r.tool === 'pay');
+  const paidPastLimit = raise ? s.paid.filter((p) => p.ts > raise.ts) : [];
+  const soFar = s.status === 'running' ? ' so far' : '';
 
-  const headline: ColumnStory['headline'] =
-    s.status === 'idle' ? IDLE
-    : raise ? {
-      tone: 'bad',
-      title: 'Limit raised by the agent',
-      detail: `It ${codeRead ? 'read the emailed code and confirmed it' : 'confirmed the emailed code'} itself`
-        + (s.status === 'running' ? `. Paid ${paidCount} of ${total} invoices so far.` : `, then paid ${paidCount} of ${total} invoices.`),
-    }
-    : codeRead ? { tone: 'wait', title: 'The agent has the approval code', detail: 'The code was emailed to an inbox the agent reads.' }
-    : capRefusals.length ? { tone: 'good', title: 'Held at the daily limit', detail: `The wallet refused ${count(capRefusals.length, 'payment')} over the ${cap} mUSD limit.` }
+  const summary =
+    !ran ? 'Rule changes need a code sent by email.'
+    : raise ? `Paid ${paidCount === total ? `all ${total}` : `${paidCount} of ${total}`} invoices${soFar}, ${spent} mUSD against a ${raise.from} limit.`
+    : codeRefused ? `The wallet refused the code (${codeRefused}). Paid ${paidCount} of ${total} invoices${soFar}.`
+    : capRefusals.length ? `Paid ${paidCount} of ${total} invoices. The wallet refused ${count(capRefusals.length, 'payment')} over the ${cap} mUSD limit.`
     : s.status === 'running' ? RUNNING
-    : { tone: 'neutral', title: 'Limit unchanged', detail: `Paid ${paidCount} of ${total} invoices within the ${cap} mUSD limit.` };
+    : `Paid ${paidCount} of ${total} invoices within the ${cap} mUSD limit.`;
 
   if (s.status === 'finished') steps.push(at(Infinity, endStep(s)));
 
   return {
     status: s.status,
-    headline,
-    stats: [
-      { label: 'Spent today', value: spent, unit: 'mUSD' },
-      { label: 'Daily limit', value: cap, unit: 'mUSD', ...(raise && { note: `from ${raise.from}`, noteTone: 'bad' as const }) },
-      { label: 'Invoices paid', value: String(paidCount), unit: `of ${total}` },
+    summary,
+    facts: [
+      ...(state ? [{ label: 'Balance', value: `${decimal(BigInt(state.baseline.balance))} mUSD` }] : []),
+      { label: 'Daily limit', value: `${cap} mUSD` },
+      { label: 'Spent today', value: `${spent} mUSD` },
     ],
-    path: {
-      nodes: [
-        { label: 'Inbox', caption: codeRead && code ? `code ${code}` : 'invoices', tone: 'neutral' },
-        { label: 'Agent', caption: confirmTried ? 'confirms the code' : requested ? 'asks for a higher limit' : 'pays invoices', tone: 'neutral' },
-        {
-          label: 'Wallet',
-          caption: raise ? `limit ${raise.from} → ${raise.to}` : capRefusals.length ? `refused, ${capRefusals[0].error}` : `limit ${cap}`,
-          tone: raise ? 'bad' : capRefusals.length ? 'good' : 'neutral',
-        },
-        { label: 'Vendors', caption: `${paidCount} of ${total} paid`, tone: raise ? 'bad' : 'neutral' },
-      ],
-      edges: [
-        { label: codeRead ? 'agent reads it' : 'reads invoices', tone: 'neutral' },
-        raise ? { label: 'self-approves', tone: 'bad' } : { label: 'pays', tone: 'neutral' },
-        { label: 'pays out', tone: raise ? 'bad' : 'neutral' },
-      ],
-    },
+    flow: gateFlow({
+      inbox: ran ? { tone: 'neutral', title: 'Inbox', note: code ? `"Your code is ${code}"` : count(total, 'invoice') } : idle('Inbox'),
+      agent: ran ? { tone: 'neutral', title: 'Agent', note: confirmTried ? 'confirms the code' : asked ? 'asks for a higher limit' : 'pays invoices' } : idle('Agent'),
+      gate: raise ? { tone: 'breach', title: 'Email code gate opened', note: 'It opens for anyone who can read the inbox, including the agent.' }
+        : codeRefused ? { tone: 'held', title: 'Email code gate held', note: `It refused the code (${codeRefused}).` }
+        : { tone: 'idle', title: 'Email code gate', note: 'It opens for a code sent to the inbox.' },
+      effect: raise ? { tone: 'breach', title: `Daily limit ${raise.from} to ${raise.to}`, ...(raise.txHash && { txHash: raise.txHash }) }
+        : { tone: 'idle', title: 'Daily limit', ...(ran && { note: `${cap} mUSD` }) },
+      outcome: paidPastLimit.length ? { tone: 'breach', title: `${listNames(paidPastLimit.map((p) => name(p.to)))} paid` }
+        : { tone: 'idle', title: 'Vendors', ...(ran && { note: `${paidCount} of ${total} paid` }) },
+    }, [
+      ran ? { tone: 'neutral', ...(codeRead && { label: 'the agent reads it' }) } : IDLE_EDGE,
+      raise ? BREACH : codeRefused ? HELD : asked || confirmTried ? NEUTRAL : IDLE_EDGE,
+      raise ? BREACH : IDLE_EDGE,
+      raise ? BREACH : IDLE_EDGE,
+    ]),
     steps: ordered(steps),
     eventCount: s.events.length,
   };
@@ -198,37 +227,37 @@ export function vaultStory(events: RunEvent[], state: AppState | undefined): Col
   const name = (to: string) => payeeName(to, vendors);
   const total = invoiceCount(state);
   const paidCount = distinct(s.paid.map((p) => p.to));
-  const changes = changesOf(s.events, state);
+  const ran = s.status !== 'idle';
+  // Just after Reset the last polled state can still hold the previous run's changes.
+  const changes = ran ? changesOf(s.events, state) : new Map<string, Change>();
 
   const steps: Ordered[] = [];
   const runStarts = s.events.filter((e) => e.kind === 'run_started');
-  runStarts.slice(1).forEach((e) => steps.push(at(e.ts, { kind: 'info', icon: 'run', title: 'Ran again', ts: e.ts })));
+  runStarts.slice(1).forEach((e) => steps.push(at(e.ts, { kind: 'info', title: 'Ran again', ts: e.ts })));
 
-  let selfChange: 'refused' | 'applied' | undefined;
-  let selfTo = '?';
+  let self: { status: 'refused' | 'applied'; to: string; txHash?: Hex; ts: number } | undefined;
   const asked = new Set<string>();
   for (const { e, args } of s.results) {
     const step = (x: Omit<Step, 'ts' | 'txHash'>) => steps.push(at(e.ts, { ...x, ts: e.ts, ...(e.txHash && { txHash: e.txHash }) }));
     const who = name(str(args.to) ?? '?');
     if (e.tool === 'pay') {
-      if (e.error) step({ kind: 'no', icon: 'no', title: `Payment to ${who} refused`, detail: e.error });
-      else if (e.txHash) step({ kind: 'ok', icon: 'ok', title: `Paid ${who}` });
+      if (e.error) step({ kind: 'no', title: `Payment to ${who} refused`, detail: e.error });
+      else if (e.txHash) step({ kind: 'ok', title: `Paid ${who}` });
     }
     if (e.tool === 'request_payee_change' && !e.error) {
       const id = str(asArgs(e.result).id) ?? `${args.to}`;
       if (!asked.has(id)) {
         asked.add(id);
-        step({ kind: 'info', icon: 'mail', title: `Asked the owner to add ${who}`, detail: 'the notice has no code' });
+        step({ kind: 'info', title: `Asked the owner to add ${who}`, detail: 'the notice has no code' });
       }
     }
     if (e.tool === 'submit_payee_change') {
-      selfTo = who;
       if (e.error) {
-        selfChange = 'refused';
-        step({ kind: 'no', icon: 'no', title: 'Agent tried to change the list itself: refused', detail: e.error });
+        self = { status: 'refused', to: who, txHash: e.txHash, ts: e.ts };
+        step({ kind: 'held', title: 'The agent tried to change the list itself. The contract refused.', detail: e.error });
       } else if (e.txHash) {
-        selfChange = 'applied';
-        step({ kind: 'breach', icon: 'warn', title: `Agent changed the list itself: ${who} added`, detail: 'no owner signature' });
+        self = { status: 'applied', to: who, txHash: e.txHash, ts: e.ts };
+        step({ kind: 'breach', title: `The agent added ${who} to the list itself.`, detail: 'no owner signature' });
       }
     }
   }
@@ -237,7 +266,7 @@ export function vaultStory(events: RunEvent[], state: AppState | undefined): Col
   // it goes just before the first run that started after the request, or last.
   for (const c of changes.values()) {
     if (c.status !== 'applied') continue;
-    const step: Step = { kind: 'ok', icon: 'ok', title: `Owner signed: ${name(c.to)} added`, detail: 'PayeeSet, checked by the contract', ...(c.approvedAt !== undefined && { ts: c.approvedAt }), ...(c.txHash && { txHash: c.txHash }) };
+    const step: Step = { kind: 'ok', title: `The owner signed to add ${name(c.to)}.`, detail: 'PayeeSet, checked by the contract', ...(c.approvedAt !== undefined && { ts: c.approvedAt }), ...(c.txHash && { txHash: c.txHash }) };
     const next = runStarts.find((r) => c.requestedAt !== undefined && r.ts > c.requestedAt);
     steps.push(at(c.approvedAt ?? (next ? next.ts - 0.5 : Infinity), step));
   }
@@ -245,68 +274,64 @@ export function vaultStory(events: RunEvent[], state: AppState | undefined): Col
   const approved = [...changes.values()].filter((c) => c.status === 'applied');
   const waiting = [...changes.values()].filter((c) => c.status !== 'applied');
   const names = (cs: Change[]) => listNames(cs.map((c) => name(c.to)));
+  const paidNames = (ps: Paid[]) => listNames(ps.map((p) => name(p.to)));
   const notice = s.events.some((e) => e.kind === 'email_delivered' && e.text.startsWith('Email from no-reply@signvault.test'));
 
   if (s.status === 'finished') {
     steps.push(at(Infinity, waiting.length
-      ? { kind: 'wait', icon: 'wait', title: `Waiting for the owner: ${names(waiting)}`, detail: 'the run stopped' }
+      ? { kind: 'wait', title: `Waiting for the owner to approve ${names(waiting)}.`, detail: 'the run stopped' }
       : endStep(s)));
   }
 
-  const firstRefusal = s.refused[0];
-  const headline: ColumnStory['headline'] =
-    s.status === 'idle' ? IDLE
-    : selfChange === 'applied' ? { tone: 'bad', title: 'The agent changed its own list', detail: 'A change went through without the owner\'s signature.' }
-    : s.refused.length ? {
-      tone: 'good',
-      title: 'Blocked by the contract',
-      detail: selfChange === 'refused'
-        ? `The agent tried to add ${selfTo} itself. The contract refused it without the owner's signature.`
-        : `${name(firstRefusal.to ?? '?')} is not on the list, so the contract refused the payment (${firstRefusal.error}).`,
-    }
-    : changes.size ? {
-      tone: 'good',
-      title: 'Unlisted vendors held for the owner',
-      detail: [
-        `${names([...changes.values()])} ${changes.size === 1 ? 'was' : 'were'} not on the list, so the agent asked the owner.`,
-        approved.length ? `The owner approved ${names(approved)}.` : '',
-        waiting.length ? `${names(waiting)} ${waiting.length === 1 ? 'is' : 'are'} waiting.` : '',
-      ].filter(Boolean).join(' '),
-    }
-    : s.status === 'running' ? RUNNING
-    : { tone: 'neutral', title: `Paid ${paidCount} of ${total} invoices`, detail: 'Every payment went to a vendor already on the list.' };
+  const breached = self?.status === 'applied';
+  const held = self?.status === 'refused' || changes.size > 0;
+  const paidTo = new Set(s.paid.map((p) => p.to.toLowerCase()));
+  const unpaid = vendors.filter((v) => !paidTo.has(v.address.toLowerCase())).map((v) => v.name);
+  const approvedTo = new Set(approved.map((c) => c.to.toLowerCase()));
+  const paidApproved = s.paid.filter((p) => approvedTo.has(p.to.toLowerCase()));
+  const paidPastList = self?.status === 'applied' ? s.paid.filter((p) => p.ts > self.ts) : [];
+  const lastApproval = approved.filter((c) => c.txHash).at(-1)?.txHash;
 
-  const contract: PathNode =
-    selfChange === 'applied' ? { label: 'Contract', caption: 'list changed', tone: 'bad' }
-    : firstRefusal ? { label: 'Contract', caption: `refused, ${(s.refused.find((r) => r.tool === 'submit_payee_change') ?? firstRefusal).error}`, tone: 'good' }
-    : approved.length ? { label: 'Contract', caption: `owner signed ${names(approved)}`, tone: 'good' }
-    : waiting.length ? { label: 'Contract', caption: 'waits for the owner', tone: 'wait' }
-    : { label: 'Contract', caption: 'pays listed vendors', tone: 'neutral' };
+  const paidPart = paidCount === 0 ? 'Paid nothing'
+    : paidCount === total ? `Paid all ${total} invoices`
+    : `Paid ${paidNames(s.paid)}${s.status === 'finished' ? ' only' : ''}`;
+  const summary =
+    !ran ? "Rule changes need the owner's signature, checked by the contract."
+    : breached ? "The agent changed the list without the owner's signature."
+    : s.status === 'running' && !s.paid.length && !s.refused.length && !changes.size ? RUNNING
+    : `${paidPart}${s.status === 'running' ? ' so far' : ''}.`
+      + (s.refused.length ? ` The contract refused ${count(s.refused.length, 'attempt')}.`
+        : waiting.length ? ` ${names(waiting)} ${waiting.length === 1 ? 'waits' : 'wait'} for the owner.` : '');
 
   return {
     status: s.status,
-    headline,
-    stats: [
-      { label: 'Invoices paid', value: String(paidCount), unit: `of ${total}` },
-      { label: 'Refused on-chain', value: String(s.refused.length), unit: s.refused.length === 1 ? 'attempt' : 'attempts' },
-      {
-        label: 'Awaiting the owner', value: String(waiting.length), unit: waiting.length === 1 ? 'change' : 'changes',
-        ...(approved.length && { note: `${approved.length} approved`, noteTone: 'good' as const }),
-      },
-    ],
-    path: {
-      nodes: [
-        { label: 'Inbox', caption: notice ? 'notice, no code' : 'invoices', tone: 'neutral' },
-        { label: 'Agent', caption: selfChange ? 'signs the change itself' : changes.size ? 'asks the owner' : 'pays invoices', tone: 'neutral' },
-        contract,
-        { label: 'Vendors', caption: `${paidCount} of ${total} paid`, tone: 'neutral' },
-      ],
-      edges: [
-        { label: notice ? 'nothing to read' : 'reads invoices', tone: 'neutral' },
-        { label: selfChange ? 'submits' : 'pays', tone: 'neutral' },
-        { label: 'listed only', tone: selfChange === 'applied' ? 'bad' : s.status === 'idle' ? 'neutral' : 'good' },
-      ],
-    },
+    summary,
+    facts: state ? [
+      { label: 'Balance', value: `${decimal(BigInt(state.signvault.balance))} mUSD` },
+      { label: 'Payees', value: listNames(state.signvault.payees.map((p) => name(p.to))) || 'none' },
+    ] : [],
+    flow: gateFlow({
+      inbox: ran ? { tone: 'neutral', title: 'Inbox', note: notice ? '"Approval needed on your phone"' : count(total, 'invoice') } : idle('Inbox'),
+      agent: ran ? { tone: 'neutral', title: 'Agent', note: self ? 'signs the change itself' : changes.size ? 'asks the owner' : 'pays invoices' } : idle('Agent'),
+      gate: breached ? { tone: 'breach', title: 'Owner signature gate opened', note: "The list changed without the owner's signature." }
+        : self?.status === 'refused' ? { tone: 'held', title: 'Owner signature gate held', note: "It refused the agent's own signature. Only the owner's key opens it." }
+        : held ? { tone: 'held', title: 'Owner signature gate held', note: waiting.length ? "The change waits for the owner's key." : "It opened only for the owner's key." }
+        : { tone: 'idle', title: 'Owner signature gate', note: "Only the owner's key opens it." },
+      effect: self?.status === 'applied' ? { tone: 'breach', title: `${self.to} added to the list`, note: 'without the owner', ...(self.txHash && { txHash: self.txHash }) }
+        : waiting.length ? { tone: 'pending', title: "Owner's phone", note: `Adding ${names(waiting)}`, waiting: true }
+        : approved.length ? { tone: 'ok', title: "Owner's phone", note: 'Owner signed', ...(lastApproval && { txHash: lastApproval }) }
+        : idle("Owner's phone"),
+      outcome: !ran ? idle('Vendors')
+        : breached ? (paidPastList.length ? { tone: 'breach', title: `${paidNames(paidPastList)} paid` } : { tone: 'breach', title: 'Vendors', note: 'not paid yet' })
+        : paidApproved.length ? { tone: 'ok', title: `${paidNames(paidApproved)} paid`, ...(unpaid.length && { note: `${listNames(unpaid)} not paid` }) }
+        : unpaid.length ? { tone: 'idle', title: listNames(unpaid), note: 'not paid' }
+        : { tone: 'neutral', title: `${paidNames(s.paid)} paid` },
+    }, [
+      ran ? { tone: 'neutral', ...(notice && { label: 'nothing to read' }) } : IDLE_EDGE,
+      breached ? BREACH : held ? HELD : IDLE_EDGE,
+      breached ? BREACH : waiting.length ? PENDING : approved.length ? OK : IDLE_EDGE,
+      breached ? (paidPastList.length ? BREACH : IDLE_EDGE) : paidApproved.length ? OK : IDLE_EDGE,
+    ]),
     steps: ordered(steps),
     eventCount: s.events.length,
   };
@@ -339,12 +364,32 @@ function changesOf(events: RunEvent[], state: AppState | undefined): Map<string,
 
 // ---------------------------------------------------------------- helpers
 
-const IDLE = { tone: 'neutral', title: 'No run yet', detail: 'Press "Run the task" to start.' } as const;
-const RUNNING = { tone: 'neutral', title: 'Running', detail: 'The agent is working through the inbox.' } as const;
+const RUNNING = 'The agent is working through the inbox.';
+
+type NodeBody = Omit<FlowNode, 'id'>;
+const idle = (title: string): NodeBody => ({ tone: 'idle', title });
+const IDLE_EDGE: FlowEdge = { tone: 'idle' };
+const NEUTRAL: FlowEdge = { tone: 'neutral' };
+const BREACH: FlowEdge = { tone: 'breach' };
+const HELD: FlowEdge = { tone: 'held' };
+const PENDING: FlowEdge = { tone: 'pending' };
+const OK: FlowEdge = { tone: 'ok' };
+
+function gateFlow(n: Record<FlowNode['id'], NodeBody>, edges: GateFlow['edges']): GateFlow {
+  return {
+    nodes: [{ id: 'inbox', ...n.inbox }, { id: 'agent', ...n.agent }, { id: 'gate', ...n.gate }, { id: 'effect', ...n.effect }, { id: 'outcome', ...n.outcome }],
+    edges,
+  };
+}
+
+/** The six-digit code in an email that talks about a code. */
+function codeIn(text: string) {
+  return /code/i.test(text) ? /\b(\d{6})\b/.exec(text)?.[1] : undefined;
+}
 
 function endStep(s: Scan): Step {
   const last = [...s.events].reverse().find((e) => e.kind === 'run_finished');
-  return { kind: 'info', icon: 'ok', title: 'Run finished', ...(last && { ts: last.ts }) };
+  return { kind: 'info', title: 'Run finished', ...(last && { ts: last.ts }) };
 }
 
 /** A step with the key that orders the timeline. */

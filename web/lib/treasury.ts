@@ -70,12 +70,12 @@ function tripwireView(t: NonNullable<AppState['signvault']['tripwire']>): Tripwi
 function step(e: RunEvent): Step[] {
   const at = { ts: e.ts, ...(e.txHash && { txHash: e.txHash }) };
   switch (e.kind) {
-    case 'run_started': return [{ kind: 'info', icon: 'run', title: 'Treasury run started', ts: e.ts }];
+    case 'run_started': return [{ kind: 'info', title: 'Treasury run started', ts: e.ts }];
     // The model's own summary stays in the raw feed: it can say "$" for mUSD, which has no value.
-    case 'run_finished': return [{ kind: 'info', icon: 'ok', title: 'Treasury run finished', ts: e.ts }];
-    case 'tx_sent': return [{ kind: 'ok', icon: 'ok', title: e.text, ...at }];
-    case 'tx_refused': return [{ kind: 'no', icon: 'no', title: e.text, ...(e.error && { detail: e.error }), ...at }];
-    case 'tool_result': return e.tool === 'check_usdy_price' ? [{ kind: 'info', icon: 'warn', title: e.text, ts: e.ts }] : [];
+    case 'run_finished': return [{ kind: 'info', title: 'Treasury run finished', ts: e.ts }];
+    case 'tx_sent': return [{ kind: 'ok', title: e.text, ...at }];
+    case 'tx_refused': return [{ kind: 'no', title: e.text, ...(e.error && { detail: e.error }), ...at }];
+    case 'tool_result': return e.tool === 'check_usdy_price' ? [{ kind: 'info', title: e.text, ts: e.ts }] : [];
     default: return [];
   }
 }
