@@ -120,10 +120,11 @@ describe('the treasury task', () => {
 
   it('says so when no live price is configured, instead of guessing one', async () => {
     const w = world();
-    const { turns } = await play(w, [() => ({ toolCalls: [call('check_usdy_price')] })]);
+    const { turns, feed } = await play(w, [() => ({ toolCalls: [call('check_usdy_price')] })]);
     expect(JSON.parse(turns[1]!.messages.at(-1)!.content!)).toEqual({
       usdyPrice: null, redemptionValue: '1', splitPercent: null, source: 'no live price configured',
     });
+    expect(feed[2]).toEqual(['tool_result', 'No live USDY price is configured, so there is no split to act on. The redemption value is 1 mUSD.']);
   });
 
   it('on a vault with no treasury, every tool says so', async () => {

@@ -4,11 +4,13 @@ import { useState } from 'react';
 import type { AppState, Email } from '@signvault/shared';
 import { Icon } from '@/components/icons';
 import { FakeEmailPanel, InboxPanel, PendingChangesPanel } from '@/components/Panels';
+import { TreasuryPanel } from '@/components/TreasuryPanel';
 import { WalletColumn, clock } from '@/components/WalletColumn';
 import { chainName } from '@/lib/approve';
 import { MOCK, postJson, startRun, useAppState, useRunEvents } from '@/lib/hooks';
 import { mockState } from '@/lib/mock-state';
 import { baselineStory, runStartedAt, vaultStory } from '@/lib/story';
+import { isTreasuryEvent, treasuryView } from '@/lib/treasury';
 
 /** The model is not in AppState or in any event, so it shows only when the person running the demo names it. */
 const MODEL = process.env.NEXT_PUBLIC_LLM_MODEL;
@@ -22,7 +24,10 @@ export default function Dashboard() {
     ? mockState(run.events)
     : live.kind === 'ready' ? live.value : live.kind === 'error' ? live.last : undefined;
   const explorerUrl = state?.explorerUrl;
-  const startedAt = runStartedAt(run.events);
+  // The treasury run is SignVault's too, but it is not the payroll story the two columns compare.
+  const payroll = run.events.filter((e) => !isTreasuryEvent(e));
+  const treasury = treasuryView(run.events, state);
+  const startedAt = runStartedAt(payroll);
 
   async function act(fn: () => Promise<unknown>) {
     setActionError(null);
@@ -92,8 +97,8 @@ export default function Dashboard() {
             icon="wallet"
             address={state?.addresses.baselineWallet}
             explorerUrl={explorerUrl}
-            story={baselineStory(run.events, state)}
-            events={run.events.filter((e) => e.wallet === 'baseline')}
+            story={baselineStory(payroll, state)}
+            events={payroll.filter((e) => e.wallet === 'baseline')}
           />
           <WalletColumn
             title="SignVault"
@@ -101,8 +106,18 @@ export default function Dashboard() {
             icon="shield"
             address={state?.addresses.signVault}
             explorerUrl={explorerUrl}
-            story={vaultStory(run.events, state)}
-            events={run.events.filter((e) => e.wallet === 'signvault')}
+            story={vaultStory(payroll, state)}
+            events={payroll.filter((e) => e.wallet === 'signvault')}
+            footer={treasury && (
+              <TreasuryPanel
+                view={treasury}
+                events={run.events.filter(isTreasuryEvent)}
+                explorerUrl={explorerUrl}
+                disabled={MOCK}
+                onRun={() => act(() => postJson('/api/runs', { wallet: 'signvault', task: 'treasury' }))}
+                onShock={(on) => act(() => postJson('/api/admin/price-shock', { on }))}
+              />
+            )}
           >
             {!MOCK && (
               <button

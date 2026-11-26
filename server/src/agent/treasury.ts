@@ -115,7 +115,10 @@ function checkPrice(prices: PriceFeed): Tool {
       text: 'Checks the USDY price against its redemption value.',
       run: async () => {
         const tripwire = (await ctx.chain.readState()).signvault.tripwire;
-        if (!tripwire) return { result: 'ERROR: this vault has no tripwire', text: 'This vault has no tripwire.' };
+        if (!tripwire) {
+          const text = 'This vault has no tripwire, so the price does not hold back a sweep.';
+          return { result: text, text };
+        }
         const nav = BigInt(tripwire.redemptionValue);
         const quote = await prices.quote(nav);
         const source = quote.simulated ? 'simulated price shock' : quote.price === null ? 'no live price configured' : 'CoinMarketCap';
@@ -124,7 +127,7 @@ function checkPrice(prices: PriceFeed): Tool {
         return {
           result,
           text: result.usdyPrice === null
-            ? `No live USDY price is configured. The redemption value is ${result.redemptionValue} mUSD.`
+            ? `No live USDY price is configured, so there is no split to act on. The redemption value is ${result.redemptionValue} mUSD.`
             : `USDY at ${result.usdyPrice} mUSD (${source}) against a redemption value of ${result.redemptionValue} mUSD: ${split}% apart.`,
         };
       },
