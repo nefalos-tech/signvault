@@ -330,7 +330,8 @@ describe('treasury routes (cards T2 and T3)', () => {
     const on = (await (await app.request('/api/admin/price-shock', post({ on: true }))).json()) as AppState;
     expect(on.signvault.tripwire).toEqual({ tripped: false, usdyPrice: (NAV * 9n / 10n).toString(), redemptionValue: NAV.toString(), simulated: true });
     const off = (await (await app.request('/api/admin/price-shock', post({ on: false }))).json()) as AppState;
-    expect(off.signvault.tripwire).toEqual(treasuryState.signvault.tripwire);
+    expect(off.signvault.tripwire).toEqual({ tripped: false, usdyPrice: null, redemptionValue: NAV.toString(), simulated: false });
+    expect(treasuryState.signvault.tripwire.simulated).toBe(false); // the chain's own state is never overwritten
   });
 
   it.each([{ on: 'yes' }, {}])('POST /api/admin/price-shock refuses %j with 400', async (body) => {

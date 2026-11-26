@@ -44,11 +44,11 @@ export function createApp(deps: AppDeps) {
     const state = await chain.readState();
     // The chain knows the tripwire and the redemption value; the price comes from the same feed the agent reads.
     const tripwire = state.signvault.tripwire;
-    if (tripwire) {
-      const quote = await prices.quote(BigInt(tripwire.redemptionValue));
-      state.signvault = { ...state.signvault, tripwire: { ...tripwire, usdyPrice: quote.price?.toString() ?? null, simulated: quote.simulated } };
-    }
-    return { ...state, pendingChanges: approvals.list(), inbox: inbox.list() };
+    const quote = tripwire && (await prices.quote(BigInt(tripwire.redemptionValue)));
+    const signvault = tripwire && quote
+      ? { ...state.signvault, tripwire: { ...tripwire, usdyPrice: quote.price?.toString() ?? null, simulated: quote.simulated } }
+      : state.signvault;
+    return { ...state, signvault, pendingChanges: approvals.list(), inbox: inbox.list() };
   };
 
   const app = new Hono().basePath('/api');
