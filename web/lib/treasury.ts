@@ -1,7 +1,6 @@
-import { formatUnits } from 'viem';
-import { MUSD_DECIMALS } from '@signvault/shared';
 import type { AppState, RunEvent } from '@signvault/shared';
 import type { RunStatus, Step } from './story';
+import { shownMusd } from './format';
 
 /**
  * The SignVault column's treasury panel (cards T2 and T3), worked out from the server state and the treasury events.
@@ -86,9 +85,5 @@ function runStatus(events: RunEvent[]): RunStatus {
   return events.some((e) => e.kind === 'run_finished' && e.runId === last.runId) ? 'finished' : 'running';
 }
 
-/** mUSD to 4 decimals, rounded half up, for display only: the split is worked out from the exact wei. */
-const SHOWN = 4;
-const decimal = (wei: string | bigint) => {
-  const step = 10n ** BigInt(MUSD_DECIMALS - SHOWN);
-  return formatUnits((BigInt(wei) + step / 2n) / step, SHOWN);
-};
+/** For display only: the split is worked out from the exact wei. */
+const decimal = shownMusd;

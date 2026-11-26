@@ -1,7 +1,7 @@
-import { formatUnits, parseUnits } from 'viem';
+import { parseUnits } from 'viem';
 import { BASELINE_DAILY_CAP, MUSD_DECIMALS, VENDORS } from '@signvault/shared';
 import type { AppState, Hex, PendingChange, RunEvent, WalletKind } from '@signvault/shared';
-import { payeeName } from './format';
+import { payeeName, shownMusd } from './format';
 
 /**
  * What each wallet card says, worked out from the run's events and, in live mode, the server state.
@@ -420,6 +420,6 @@ function joinAnd(xs: string[]) {
 }
 
 const count = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
-const decimal = (wei: bigint) => formatUnits(wei, MUSD_DECIMALS);
+const decimal = (wei: bigint) => shownMusd(wei);
 const str = (x: unknown) => (typeof x === 'string' ? x : undefined);
 const asArgs = (x: unknown): Args => (x && typeof x === 'object' && !Array.isArray(x) ? (x as Args) : {});

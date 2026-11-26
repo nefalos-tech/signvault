@@ -454,3 +454,14 @@ describe('what the screen may say', () => {
     for (const s of all) expect(JSON.stringify([s, storyBadge(s)])).not.toMatch(/\bfirst\b|unhackable|new kind of wallet/i);
   });
 });
+
+describe('amounts in the facts row', () => {
+  it('show a long on-chain balance rounded to 4 decimals', () => {
+    const state = stateWith([], [], {
+      baseline: { balance: '9969999999999999999', dailyCap: String(MUSD / 100n), spentToday: '0' },
+      signvault: { balance: '9989999999999999999', nonce: '0', payees: [{ to: V1, amount: String(MUSD / 100n), paidThisPeriod: false }] },
+    } as unknown as Partial<AppState>);
+    expect(baselineStory([], state).facts.find((f) => f.label === 'Balance')?.value).toBe('9.97 mUSD');
+    expect(vaultStory([], state).facts.find((f) => f.label === 'Balance')?.value).toBe('9.99 mUSD');
+  });
+});
