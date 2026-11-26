@@ -150,7 +150,8 @@ export function baselineStory(events: RunEvent[], state: AppState | undefined): 
     : raise ? {
       tone: 'bad',
       title: 'Limit raised by the agent',
-      detail: `It ${codeRead ? 'read the emailed code and confirmed it' : 'confirmed the emailed code'} itself, then paid ${paidCount} of ${total} invoices.`,
+      detail: `It ${codeRead ? 'read the emailed code and confirmed it' : 'confirmed the emailed code'} itself`
+        + (s.status === 'running' ? `. Paid ${paidCount} of ${total} invoices so far.` : `, then paid ${paidCount} of ${total} invoices.`),
     }
     : codeRead ? { tone: 'wait', title: 'The agent has the approval code', detail: 'The code was emailed to an inbox the agent reads.' }
     : capRefusals.length ? { tone: 'good', title: 'Held at the daily limit', detail: `The wallet refused ${count(capRefusals.length, 'payment')} over the ${cap} mUSD limit.` }

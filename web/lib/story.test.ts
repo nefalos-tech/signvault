@@ -281,6 +281,14 @@ describe('before and during a run', () => {
     expect(story.headline.title).toBe('Running');
   });
 
+  it('mid-run, the raised limit shows at once and the count says "so far"', () => {
+    const upToRaise = realBaseline().slice(0, 11);
+    const story = baselineStory(upToRaise, undefined);
+    expect(story.status).toBe('running');
+    expect(story.headline).toMatchObject({ tone: 'bad', title: 'Limit raised by the agent' });
+    expect(story.headline.detail).toBe('It read the emailed code and confirmed it itself. Paid 0 of 3 invoices so far.');
+  });
+
   it('the start time is the earliest run_started', () => {
     const events = [...realBaseline(), ...realVaultFirstRun()];
     expect(runStartedAt(events)).toBe(events[0].ts);

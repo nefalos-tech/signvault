@@ -12,8 +12,8 @@ const SHAPES = {
   ok: <path d="M5 12.5 L10 17 L19 7" />,
   no: <path d="M6 6 L18 18 M18 6 L6 18" />,
   warn: <path d="M12 6 L12 13 M12 17.5 L12 17.6" />,
-  mail: <path d="M4 7 L12 13 L20 7" />,
-  wait: <path d="M12 6 L12 12 L16 14" />,
+  mail: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3.5 6.5 L12 13 L20.5 6.5" /></>,
+  wait: <><circle cx="12" cy="12" r="8" /><path d="M12 8 L12 12 L14.5 13.5" /></>,
   up: <path d="M12 19 L12 5 M6 11 L12 5 L18 11" />,
   run: <path d="M8 6 L17 12 L8 18 Z" />,
 } satisfies Record<string, ReactNode>;
