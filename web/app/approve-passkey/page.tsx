@@ -78,13 +78,9 @@ export default function ApprovePasskeyPage() {
     }
   }
 
-  if (load.kind === 'loading') return <Shell><p className="text-lg text-neutral-600">Loading…</p></Shell>;
-  if (load.kind === 'error') return <Shell><p className="text-lg text-red-700">Could not load the vault: {load.message}</p></Shell>;
-
-  const { state, changes } = load;
   const setStep = (id: string, step: Step) => setSteps((s) => ({ ...s, [id]: step }));
 
-  async function approve(change: PendingChange) {
+  async function approve(change: PendingChange, state: AppState) {
     setStep(change.id, { kind: 'busy', label: 'Follow the Face ID or Touch ID prompt…' });
     let approval: Hex | undefined;
     try {
@@ -139,22 +135,28 @@ export default function ApprovePasskeyPage() {
         {passkey && <p className="text-sm text-neutral-500">A vault deployed with the old key will refuse the new one.</p>}
         {registering.kind === 'error' && <p className="text-red-700">{registering.message}</p>}
       </section>
-      <p className="text-neutral-600">
-        Vault {shortAddress(state.addresses.signVault)} on {chainName(state.chainId)}
-      </p>
-      {changes.length === 0 && <p className="text-lg">Nothing waiting for your approval.</p>}
-      <ul className="flex flex-col gap-4">
-        {changes.map((change) => (
-          <ChangeCard
-            key={change.id}
-            change={change}
-            text={describeChange(change, state.vendors)}
-            explorerUrl={state.explorerUrl}
-            step={steps[change.id] ?? { kind: 'idle' }}
-            onApprove={() => approve(change)}
-          />
-        ))}
-      </ul>
+      {load.kind === 'loading' && <p className="text-lg text-neutral-600">Loading the vault…</p>}
+      {load.kind === 'error' && <p className="text-lg text-red-700">Could not load the vault: {load.message}</p>}
+      {load.kind === 'ready' && (
+        <>
+          <p className="text-neutral-600">
+            Vault {shortAddress(load.state.addresses.signVault)} on {chainName(load.state.chainId)}
+          </p>
+          {load.changes.length === 0 && <p className="text-lg">Nothing waiting for your approval.</p>}
+          <ul className="flex flex-col gap-4">
+            {load.changes.map((change) => (
+              <ChangeCard
+                key={change.id}
+                change={change}
+                text={describeChange(change, load.state.vendors)}
+                explorerUrl={load.state.explorerUrl}
+                step={steps[change.id] ?? { kind: 'idle' }}
+                onApprove={() => approve(change, load.state)}
+              />
+            ))}
+          </ul>
+        </>
+      )}
     </Shell>
   );
 }
