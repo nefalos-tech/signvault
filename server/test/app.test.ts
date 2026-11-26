@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import {
   INVOICE_AMOUNT,
   VENDORS,
@@ -210,28 +210,37 @@ describe('POST /api/admin/reset', () => {
   });
 });
 
-/** Reads one SSE message at a time from a response body, failing instead of hanging. */
+/**
+ * Reads an SSE response one message at a time, failing instead of hanging. `frame` returns the next
+ * raw frame. `next` skips comment lines and comment-only frames, as EventSource does.
+ */
 function sseReader(res: Response) {
   const reader = res.body!.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
+  const frameBy = async (deadline: number): Promise<string> => {
+    while (!buffer.includes('\n\n')) {
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('timed out waiting for an SSE message')), deadline - Date.now()),
+      );
+      const { done, value } = await Promise.race([reader.read(), timeout]);
+      if (done) throw new Error('stream ended');
+      buffer += decoder.decode(value, { stream: true });
+    }
+    const end = buffer.indexOf('\n\n');
+    const message = buffer.slice(0, end);
+    buffer = buffer.slice(end + 2);
+    return message;
+  };
   return {
+    frame: (ms = 2000) => frameBy(Date.now() + ms),
     async next(): Promise<{ id: string; event: RunEvent }> {
       const deadline = Date.now() + 2000;
-      while (!buffer.includes('\n\n')) {
-        const timeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('timed out waiting for an SSE message')), deadline - Date.now()),
-        );
-        const { done, value } = await Promise.race([reader.read(), timeout]);
-        if (done) throw new Error('stream ended');
-        buffer += decoder.decode(value, { stream: true });
-      }
-      const end = buffer.indexOf('\n\n');
-      const message = buffer.slice(0, end);
-      buffer = buffer.slice(end + 2);
+      let lines: string[];
+      do lines = (await frameBy(deadline)).split('\n').filter((l) => !l.startsWith(':'));
+      while (lines.length === 0);
       const field = (name: string) =>
-        message
-          .split('\n')
+        lines
           .filter((l) => l.startsWith(`${name}: `))
           .map((l) => l.slice(name.length + 2))
           .join('\n');
@@ -240,6 +249,8 @@ function sseReader(res: Response) {
     cancel: () => reader.cancel(),
   };
 }
+
+const isComment = (frame: string) => frame.split('\n').every((l) => l.startsWith(':'));
 
 describe('GET /api/events', () => {
   const event = (text: string, extra: Partial<RunEvent> = {}) => ({
@@ -279,7 +290,42 @@ describe('GET /api/events', () => {
     await sse.cancel();
   });
 
-  it('stops listening when the client goes away', async () => {
+  it('opens with a comment at once, before any event exists', async () => {
+    const { app } = setup();
+    const sse = sseReader(await app.request('/api/events'));
+    expect(isComment(await sse.frame(200))).toBe(true);
+    await sse.cancel();
+  });
+
+  it('sends a comment heartbeat while no events happen', async () => {
+    const app = createApp({ ...setup().deps, heartbeatMs: 20 });
+    const sse = sseReader(await app.request('/api/events'));
+    const frames = [await sse.frame(), await sse.frame(), await sse.frame()];
+    expect(frames).toEqual([expect.stringMatching(/^:/), ': ping', ': ping']);
+    await sse.cancel();
+  });
+
+  it('logs an event it cannot send and keeps streaming the ones after it', async () => {
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => {});
+    onTestFinished(() => logged.mockRestore());
+    const { app, events } = setup();
+    const sse = sseReader(await app.request('/api/events'));
+
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    events.emit(event('unsendable', { args: circular }));
+    const after = events.emit(event('after'));
+
+    expect((await sse.next()).event).toEqual(after);
+    expect(logged).toHaveBeenCalledOnce();
+    await sse.cancel();
+  });
+
+  it('stops listening and the heartbeat when the client goes away', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     const { app, events } = setup();
     let listening = 0;
     const subscribe = events.subscribe.bind(events);
@@ -296,9 +342,11 @@ describe('GET /api/events', () => {
     events.emit(event('one'));
     await sse.next();
     expect(listening).toBe(1);
+    expect(vi.getTimerCount()).toBe(1);
     await sse.cancel();
     await new Promise((r) => setTimeout(r, 10));
     expect(listening).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
