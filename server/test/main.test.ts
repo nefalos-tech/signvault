@@ -1,6 +1,7 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { INVOICE_AMOUNT, type AppState, type LlmPort, type RunEvent } from '@signvault/shared';
+import { privateKeyToAccount } from 'viem/accounts';
+import { FAKE_KEY_LABELS, INVOICE_AMOUNT, labelKey, rearmTypedData, type AppState, type LlmPort, type RunEvent } from '@signvault/shared';
 import { loadDeployment } from '@signvault/shared/deployments';
 import { createApp } from '../src/app';
 import { FakeChain } from '../src/chain/fake';
@@ -60,6 +61,34 @@ describe('compose', () => {
     const ids = await deps.startRun('signvault');
     expect(ids).toHaveLength(1);
     expect(ids[0]).toMatch(/^signvault-/);
+  });
+
+  it("starts SignVault's treasury task as a treasury- run", async () => {
+    const chain = new FakeChain({ treasury: true });
+    const deps = await compose({ chain, llm: finishAtOnce });
+    const [id] = await deps.startRun('signvault', 'treasury');
+    expect(id).toMatch(/^treasury-/);
+  });
+
+  it("rearm relays the owner's signature, moves open payee changes to the new nonce, and reports it in the treasury feed", async () => {
+    const chain = new FakeChain({ treasury: true });
+    const deps = await compose({ chain, llm: finishAtOnce });
+    const seen: RunEvent[] = [];
+    deps.events.subscribe((e) => seen.push(e));
+    await chain.vaultTrip();
+    const change = await deps.approvals.request(fake.vendors[1].address, INVOICE_AMOUNT);
+    expect(change.nonce).toBe('0');
+
+    const owner = privateKeyToAccount(labelKey(FAKE_KEY_LABELS.owner));
+    const sign = (nonce: bigint) => owner.signTypedData(rearmTypedData({ chainId: fake.chainId, vault: fake.pairs[0].signVault, nonce }));
+    expect(await deps.rearm(await sign(5n))).toMatchObject({ ok: false, error: 'OwnerApprovalRequired' });
+    expect(await deps.rearm(await sign(0n))).toMatchObject({ ok: true });
+
+    expect(deps.approvals.list()[0]!.nonce).toBe('1');
+    expect(seen.map((e) => [e.runId.startsWith('treasury-'), e.wallet, e.kind, e.text, e.error])).toEqual([
+      [true, 'signvault', 'tx_refused', 'Re-arm refused: OwnerApprovalRequired.', 'OwnerApprovalRequired'],
+      [true, 'signvault', 'tx_sent', "The owner re-armed the tripwire from their phone. Sweeping is unlocked.", undefined],
+    ]);
   });
 
   it('reset moves to a fresh pair, drops pending changes and reseeds only the invoices', async () => {

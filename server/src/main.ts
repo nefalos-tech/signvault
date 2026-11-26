@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serve } from '@hono/node-server';
@@ -10,12 +11,14 @@ import {
 import { loadDeployment } from '@signvault/shared/deployments';
 import { runAgent } from './agent/loop';
 import { createOpenAiLlm } from './agent/llm';
+import { treasuryTask } from './agent/treasury';
 import { createApp, type AppDeps } from './app';
 import { Approvals } from './approvals';
 import { FakeChain } from './chain/fake';
 import { createViemChain } from './chain/viem';
 import { MemoryEvents } from './events';
 import { COMPANY_INBOX, MemoryInbox } from './inbox';
+import { PriceFeed } from './price/feed';
 import { Provider } from './provider';
 
 const PORT = 8787;
@@ -84,7 +87,7 @@ function signer(name: 'AGENT_PRIVATE_KEY' | 'OPERATOR_PRIVATE_KEY', env: ChainEn
  * Reset swaps in a fresh Provider and Approvals behind stable ports, so an unused code
  * or a pending change from the last wallet pair cannot reach the next one.
  */
-export async function compose({ chain, llm }: { chain: ChainPort; llm: LlmPort }): Promise<AppDeps> {
+export async function compose({ chain, llm, prices = new PriceFeed() }: { chain: ChainPort; llm: LlmPort; prices?: PriceFeed }): Promise<AppDeps> {
   const inbox = new MemoryInbox();
   const events = new MemoryEvents();
   let provider = new Provider(chain, inbox);
@@ -108,13 +111,30 @@ export async function compose({ chain, llm }: { chain: ChainPort; llm: LlmPort }
     inbox,
     events,
     approvals: approvalsPort,
-    async startRun(wallet) {
+    prices,
+    async startRun(wallet, task) {
       const wallets: WalletKind[] = wallet === 'both' ? ['baseline', 'signvault'] : [wallet];
       return wallets.map((w) => {
-        const run = runAgent({ wallet: w, chain, inbox, provider: providerPort, approvals: approvalsPort, llm, events });
+        const run = runAgent({
+          wallet: w, chain, inbox, provider: providerPort, approvals: approvalsPort, llm, events,
+          ...(task === 'treasury' && { task: treasuryTask(prices) }),
+        });
         void run.done.then((r) => console.log(`run ${r.runId}: ${r.outcome} after ${r.toolCalls} tool calls`));
         return run.runId;
       });
+    },
+    /** Card T3: the operator relays the owner's Rearm. It spends the vault's nonce, so open payee changes move to the next one. */
+    async rearm(signature) {
+      const result = await chain.vaultRearm(signature);
+      if (result.ok) approvals.syncNonce((await chain.readState()).signvault.nonce);
+      events.emit({
+        runId: `treasury-owner-${randomUUID().slice(0, 8)}`,
+        wallet: 'signvault',
+        ...(result.ok
+          ? { kind: 'tx_sent', text: 'The owner re-armed the tripwire from their phone. Sweeping is unlocked.', txHash: result.txHash }
+          : { kind: 'tx_refused', text: `Re-arm refused: ${result.error}.`, error: result.error, ...(result.txHash && { txHash: result.txHash }) }),
+      });
+      return result;
     },
     async reset() {
       await chain.nextPair();
@@ -129,7 +149,8 @@ export async function compose({ chain, llm }: { chain: ChainPort; llm: LlmPort }
 async function main() {
   const chain = createChain(process.env);
   const llm = createOpenAiLlm({ ...process.env, LLM_MODEL: process.env.LLM_MODEL || DEFAULT_MODEL });
-  const app = createApp(await compose({ chain, llm }));
+  // Card T3: no live USDY price until server/src/price/cmc.ts lands. Then: new PriceFeed(() => fetchUsdyPrice(CMC_API_KEY)).
+  const app = createApp(await compose({ chain, llm, prices: new PriceFeed() }));
   const server = serve({ fetch: app.fetch, port: PORT }, () => {
     console.log(`server on http://localhost:${PORT}/api, CHAIN=${process.env.CHAIN || 'fake'}`);
   });
