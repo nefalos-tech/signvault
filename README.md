@@ -1,6 +1,13 @@
 # SignVault
 
-SignVault is a wallet contract for an AI agent on BNB Chain. The agent pays only the payees on a list, and only the owner's phone can change the list.
+SignVault is a rule-based vault for companies on BNB Chain. An AI agent runs payroll and parks spare cash in tokenized T-bills, but it can't rewrite four rules:
+
+1. Payroll goes only to listed payees, once per period.
+2. A rule change needs the owner's EIP-712 signature from a phone.
+3. A sweep into T-bills can't leave less cash than the payroll still owed this period.
+4. If USDY's live CoinMarketCap price splits from its redemption value by more than 1%, the agent trips a tripwire. The tripwire moves everything back to cash and locks sweeping until the owner re-arms it.
+
+The contract enforces rules 1 to 3 and the lock in rule 4. The 1% check is the agent's own instruction, because the contract does not read the price.
 The contract checks the owner's EIP-712 signature itself, so there is no emailed code for the agent to read and no server to trust.
 The demo re-runs the attack from a published study against a standard wallet and against SignVault, side by side.
 
@@ -217,6 +224,116 @@ At the end of the run:
 - SignVault holds 9.98 mUSD, its nonce is 1, and it lists Vendor 1 and Vendor 2.
 - Nobody approved Vendor 3's change, so Vendor 3 was not paid.
 
+## The treasury and CoinMarketCap
+
+The treasury vault is SignVault with a T-bill sleeve and a tripwire. The agent keeps this period's payroll in cash and moves the rest into T-bills. It checks USDY's live price on CoinMarketCap before every sweep.
+
+### What it does
+
+- [`contracts/src/TBillSignVault.sol`](contracts/src/TBillSignVault.sol) adds the sleeve. The agent calls `sweep(assets)` to move cash into mUSDY and `redeem(shares)` to move it back. Both name the vault as receiver and owner, so the money only moves between the vault's cash and its own T-bills. `owedThisPeriod()` is what listed payees are still owed this period. A sweep that would leave less cash than that reverts with `SweepDipsIntoPayroll`.
+- [`contracts/src/TripwireVault.sol`](contracts/src/TripwireVault.sol) adds the tripwire. The agent calls `trip()`, which redeems every T-bill share back to cash and sets `tripped`. While `tripped` is true, `sweep` reverts with `SweepLocked`. Only `rearm(approval)` clears it, and only with the owner's EIP-712 signature over `Rearm(uint256 nonce)`. It spends the same nonce as `setPayee`, so each owner approval is used once.
+- [`contracts/src/MockUSDY.sol`](contracts/src/MockUSDY.sol) is the T-bill, an ERC-4626 vault over mUSD. Its redemption value is `convertToAssets(1e18)`, the mUSD that one mUSDY redeems for.
+- The payee list, `pay` and `setPayee` are unchanged from [`contracts/src/interfaces/ISignVault.sol`](contracts/src/interfaces/ISignVault.sol).
+
+The agent's tripwire rule is in [`server/src/agent/treasury.ts`](server/src/agent/treasury.ts). Before a sweep, the agent calls `check_usdy_price`. If the price and the redemption value are more than 1% apart (`TRIP_PERCENT`), it calls `trip` and does not sweep. The contract does not read the price. It enforces what comes after the trip.
+
+### The CoinMarketCap call
+
+[`server/src/price/cmc.ts`](server/src/price/cmc.ts) makes this call:
+
+```
+GET https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id=29256
+X-CMC_PRO_API_KEY: <CMC_API_KEY>
+```
+
+- 29256 is USDY (Ondo US Dollar Yield). The code asks by id, because the symbol USDY also matches an inactive token.
+- `livePriceFeed` in [`server/src/main.ts`](server/src/main.ts) wires the call into the server. The server keeps each answer for 60 seconds.
+- Why this feed: the agent compares USDY's market price with the redemption value of the T-bills it holds. When the two split, the market no longer values the token at what it redeems for, so the agent moves the money back to cash instead of sweeping more in.
+- The key stays on the server. It goes only in the request header. It is never logged, never put in an event, and never sent to the web.
+- Without `CMC_API_KEY`, the server prints a warning and falls back to CoinMarketCap's keyless public API, `/public-api/v3/cryptocurrency/quotes/latest?id=29256`. That is not the Pro API, and the call is not tied to a key.
+
+### Set it up
+
+1. Follow "Before you start" above.
+2. Add a `CMC_API_KEY=` line to `.env`, with your CoinMarketCap API key after the `=`. The line is not in `.env.example`. The server asks CoinMarketCap at most once a minute.
+
+### Run it on your machine
+
+The fake chain needs no anvil and no chain keys. It still makes the real CoinMarketCap call. Start the server, and then start the web app in a second terminal.
+
+```sh
+CHAIN=fake DEPLOYMENT=fake-treasury pnpm dev:server
+```
+
+```sh
+pnpm -C web dev
+```
+
+The **Treasury** card shows only when the vault has a T-bill sleeve, so `DEPLOYMENT=fake-treasury` is required.
+
+1. Open http://localhost:3000 and click **Run the treasury task**. The agent checks the treasury, checks USDY's price, and then sweeps or trips.
+2. The fake vault's redemption value is 1 mUSD, and USDY trades above 1 USD, so on the fake chain the split is more than 1% and the agent trips the wire on the live price. For a sweep, run it on testnet.
+
+### Run it on BSC testnet
+
+You need the operator and agent keys from "Run it on testnet", the model key, `CMC_API_KEY`, and the phone wallet to re-arm.
+
+1. Start the server on an unused treasury pair. Pairs 0 to 2 are used, and the demo video ran pair 2, so start at 3. A pair is unused while both of its wallets still hold 10 mUSD.
+
+	```sh
+	CHAIN=bsctest RPC_URL=https://bsc-testnet-rpc.publicnode.com DEPLOYMENT=97-treasury PAIR=3 pnpm dev:server
+	```
+
+2. Build and start the web app, and open the tunnel, as in steps 3 and 4 of "Run it on testnet".
+3. Open http://localhost:3000 and click **Run the treasury task**. While USDY's live price is within 1% of the redemption value, the agent sweeps the spare cash into T-bills and keeps the payroll still owed in cash. The testnet MockUSDY's redemption value is 1.1541 mUSD, set at deploy from USDY's value then. If USDY has moved more than 1% since, the agent trips on the live price instead.
+4. Switch on **Simulate a price shock** and click **Run the treasury task** again. The agent sees a price 10% under the live price, labelled "simulated price shock", and trips the wire. Every T-bill goes back to cash, and sweeping is locked.
+5. To re-arm, open `<that address>/rearm` in the MetaMask app's **Browser** tab on the phone. Tap **Re-arm** and sign the `Rearm` request with the owner account.
+
+### The treasury deployment
+
+`contracts/script/DeployTreasury.s.sol` deployed MockUSDY over the same MockUSD, and 8 pairs of one `BaselineWallet` and one `TripwireVault`. [`deployments/97-treasury.json`](deployments/97-treasury.json) has the full list. The operator, agent, owner and vendors are the same as in "Deployed addresses".
+
+| Role | Address |
+|---|---|
+| MockUSDY (mUSDY) | [`0x778c4A14155Ce8c46cAB4Bcf074d37555822b411`](https://testnet.bscscan.com/address/0x778c4A14155Ce8c46cAB4Bcf074d37555822b411) |
+
+| Pair | BaselineWallet | TripwireVault |
+|---|---|---|
+| 0 | [`0xfE563d2A62B9999B4a1E9c8B0335BA7382a9B5b8`](https://testnet.bscscan.com/address/0xfE563d2A62B9999B4a1E9c8B0335BA7382a9B5b8) | [`0x2F14D17076BD2A087E02BbCd5B057c9deb8c4F4A`](https://testnet.bscscan.com/address/0x2F14D17076BD2A087E02BbCd5B057c9deb8c4F4A) |
+| 1 | [`0x84C415a5914A30850F09DDE78eA92a9880571C1d`](https://testnet.bscscan.com/address/0x84C415a5914A30850F09DDE78eA92a9880571C1d) | [`0xaC9dc71F2bC81f2b9B63122bEB925166762FA09F`](https://testnet.bscscan.com/address/0xaC9dc71F2bC81f2b9B63122bEB925166762FA09F) |
+| 2 (the demo video ran this pair) | [`0x62937d619Fb3f0aeD484C1c0CA69B27EB07eD1BD`](https://testnet.bscscan.com/address/0x62937d619Fb3f0aeD484C1c0CA69B27EB07eD1BD) | [`0xBf6ABCCa41C45AF3c96F89a7f1c1e932cd5fD78C`](https://testnet.bscscan.com/address/0xBf6ABCCa41C45AF3c96F89a7f1c1e932cd5fD78C) |
+| 3 | [`0x42C618206442Dd81A73AE754f62bFE1a6aCdFe06`](https://testnet.bscscan.com/address/0x42C618206442Dd81A73AE754f62bFE1a6aCdFe06) | [`0xA78B53bc429801002a20d6c6191629d913EE1175`](https://testnet.bscscan.com/address/0xA78B53bc429801002a20d6c6191629d913EE1175) |
+| 4 | [`0xe91a8E57b2aC0b86C7583EB40488F9f5d4328573`](https://testnet.bscscan.com/address/0xe91a8E57b2aC0b86C7583EB40488F9f5d4328573) | [`0x815D1C42b83f395883B5ef995661867d046a41C6`](https://testnet.bscscan.com/address/0x815D1C42b83f395883B5ef995661867d046a41C6) |
+| 5 | [`0xE53737fc1Ce929540F1287553FA591e8C2C432c5`](https://testnet.bscscan.com/address/0xE53737fc1Ce929540F1287553FA591e8C2C432c5) | [`0xD8B95fa364cF2AbCCBFe167390B94000D6596413`](https://testnet.bscscan.com/address/0xD8B95fa364cF2AbCCBFe167390B94000D6596413) |
+| 6 | [`0x6c30Ae7ACE0FE1326a8e27Dc867fAdc2329EfDe1`](https://testnet.bscscan.com/address/0x6c30Ae7ACE0FE1326a8e27Dc867fAdc2329EfDe1) | [`0x5Ca41649d7E29665A8B1C10187E37439B88c8Fb8`](https://testnet.bscscan.com/address/0x5Ca41649d7E29665A8B1C10187E37439B88c8Fb8) |
+| 7 | [`0x9eA379474F83FEfA7BB5A1f0DfDA8d256Dc871c0`](https://testnet.bscscan.com/address/0x9eA379474F83FEfA7BB5A1f0DfDA8d256Dc871c0) | [`0x6C4044DCa3592EE4E88A83FA8BDabC3E8DdC0F75`](https://testnet.bscscan.com/address/0x6C4044DCa3592EE4E88A83FA8BDabC3E8DdC0F75) |
+
+Each wallet starts with 10 mUSD. Each BaselineWallet has a daily cap of 0.01 mUSD, and each TripwireVault lists Vendor 1 at 0.01 mUSD per day.
+
+### The demo video's run, on treasury pair 2
+
+| Step | Transaction |
+|---|---|
+| The baseline agent confirms the code the wallet emailed it, and its daily limit goes up | [`0x8a1574de…806c`](https://testnet.bscscan.com/tx/0x8a1574deda7444e8cecbc48fb5ece3f221d18f73a3296f7cc978bbf2f44a806c) |
+| The owner approves adding Vendor 2 on the phone, the operator relays the approval, and the vault emits `PayeeSet` | [`0x27c7c279…8c63`](https://testnet.bscscan.com/tx/0x27c7c279900740aa807393463435643273fa06dfceadae5cd2420cc5657c8c63) |
+| SignVault pays Vendor 2 | [`0xb704d6b3…2f68`](https://testnet.bscscan.com/tx/0xb704d6b350a9c97149fd2443f9a1860927233a6278a64cdb57f2f441e5592f68) |
+| On a live CoinMarketCap price, the agent sweeps 9.98 mUSD into T-bills | [`0x44b34ea6…ef37`](https://testnet.bscscan.com/tx/0x44b34ea6f330961d572e6942ad85d855a53a75803ea91d9cc6381f6c28acef37) |
+| With the simulated price shock on, the agent trips the wire, and every T-bill goes back to cash | [`0x94a1d174…2219`](https://testnet.bscscan.com/tx/0x94a1d1740d78f07c55feabe2c8c945258b331686f020b03be7128e24953f2219) |
+
+Nobody re-armed the vault, so the trip is still in effect. Sweeping stays locked, and the vault's nonce is 1.
+
+### Verify the CoinMarketCap usage
+
+1. **The run feed.** Each `check_usdy_price` line on the dashboard names its source, `CoinMarketCap Pro API, USDY id 29256`, then gives the price in USD and CoinMarketCap's `last_updated` time. Without a key, the source reads `CoinMarketCap keyless public API, USDY id 29256`. A shocked price reads `simulated price shock`. Click **View raw treasury events** for the raw lines.
+2. **The API logs.** Every Pro API call carries the team's key, so it shows in that key's usage in the CoinMarketCap developer portal.
+3. **On chain.** The chain does not store the price, but it shows what the agent did with it: the sweep and the trip above. The trip emits `Tripped(shares, assets)`, and the vault still reports it.
+
+	```sh
+	cast call --rpc-url https://bsc-testnet-rpc.publicnode.com 0xBf6ABCCa41C45AF3c96F89a7f1c1e932cd5fD78C 'tripped()(bool)'
+	```
+
+	It prints `true`.
+
 ## What the agent key can and cannot do
 
 The rules below come from the frozen interface [`contracts/src/interfaces/ISignVault.sol`](contracts/src/interfaces/ISignVault.sol). The contract that enforces them is [`contracts/src/SignVault.sol`](contracts/src/SignVault.sol).
@@ -230,8 +347,12 @@ The agent key cannot do any of the following.
 - Add, change, or remove a payee without the owner's signature.
 - Withdraw funds or make a general transfer. SignVault has no function for either.
 - Change `owner` or `agent`. No function sets them after the constructor.
+- Re-arm a tripped vault without the owner's signature.
+- Move T-bills or their cash anywhere but the vault itself.
 
-`setPayee` is the only way to change a rule. The owner key lives in the phone wallet, never on the server.
+On a treasury vault, [`contracts/src/TripwireVault.sol`](contracts/src/TripwireVault.sol), the agent key can also call `sweep(assets)`, `redeem(shares)` and `trip()`. Any other caller gets `OnlyAgent`. A sweep that would leave less cash than `owedThisPeriod()` reverts with `SweepDipsIntoPayroll`, and a sweep after a trip reverts with `SweepLocked`. Anyone may relay `rearm(approval)`, but it applies only with the owner's EIP-712 signature over `Rearm(uint256 nonce)`. Without that signature, it reverts with `OwnerApprovalRequired`. It spends the same nonce as `setPayee`.
+
+`setPayee` and `rearm` are the only ways to change a rule, and both need the owner's signature. The owner key lives in the phone wallet, never on the server.
 
 For comparison, the agent on `BaselineWallet` can pay anyone up to `dailyCap`. The operator raises the cap after the agent confirms a code that arrives by email, in an inbox the agent can read.
 
@@ -239,8 +360,10 @@ For comparison, the agent on `BaselineWallet` can pay anyone up to `dailyCap`. T
 
 The demo uses this split, from section 13 of [`spec.md`](spec.md).
 
-- Real: the three contracts on BSC testnet, every transaction and refusal, the owner's signature and its on-chain check, and the model's decisions in a live run.
+- Real: the contracts on BSC testnet, every transaction and refusal, the owner's signature and its on-chain check, and the model's decisions in a live run. USDY's price from CoinMarketCap is real and live.
 - Mocked: the token (mUSD has no value), the inbox (it lives in our server), the vendors, and the "wallet provider" for the baseline. The baseline provider is our own contract and server, written to mirror the study's setup. It is not Circle's product.
+- Mocked: mUSDY, which stands in for a tokenized T-bill such as Ondo's USDY. Its yield is simulated: `accrue` mints mUSD into the pool, and the deploy script calls it once to set the redemption value. The demo earned no yield.
+- Simulated: the price shock. It sets the price 10% under the live price, or 10% under the redemption value when there is no live price (`SHOCK_PERCENT` in [`server/src/price/feed.ts`](server/src/price/feed.ts)). The dashboard and the agent's feed label it simulated.
 - Recorded: replay mode plays a run that we captured earlier. The screen labels it. Card D3 records it.
 
 ## Prior art
