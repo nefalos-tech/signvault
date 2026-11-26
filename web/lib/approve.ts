@@ -15,6 +15,11 @@ export function changeTypedData(change: PendingChange, state: AppState) {
   });
 }
 
+/** The owner may sign a pending change, and sign again after a relay failed. An applied change is final. */
+export function canApprove(status: PendingChange['status']) {
+  return status !== 'applied';
+}
+
 export function shortAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
