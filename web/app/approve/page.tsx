@@ -4,7 +4,7 @@ import 'viem/window';
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { AppState, Hex, PendingChange } from '@signvault/shared';
-import { chainName, describeChange, postApproval, shortAddress, signApproval } from '@/lib/approve';
+import { canApprove, chainName, describeChange, postApproval, shortAddress, signApproval } from '@/lib/approve';
 import { MOCK_CHANGES, MOCK_STATE } from './fixture';
 
 const MOCK = process.env.NEXT_PUBLIC_MOCK === '1';
@@ -75,7 +75,7 @@ export default function ApprovePage() {
       const vault = await fetchVault();
       setLoad({ kind: 'ready', ...vault });
       const current = vault.changes.find((c) => c.id === change.id);
-      if (current?.status !== 'pending') {
+      if (!current || !canApprove(current.status)) {
         setStep(change.id, { kind: 'idle' });
         return;
       }
@@ -140,14 +140,15 @@ function ChangeCard(props: {
       <p className="break-all font-mono text-sm text-neutral-500">
         {change.to} · nonce {change.nonce}
       </p>
-      {change.status === 'pending' && step.kind !== 'signed' && (
+      {change.status === 'failed' && <p className="text-lg text-red-700">Failed: {change.error ?? 'unknown error'}</p>}
+      {canApprove(change.status) && step.kind !== 'signed' && (
         <button
           type="button"
           onClick={onApprove}
           disabled={step.kind === 'busy'}
           className="h-14 w-full rounded-xl bg-neutral-900 text-lg font-semibold text-white active:bg-neutral-700 disabled:opacity-60"
         >
-          {step.kind === 'busy' ? step.label : 'Approve'}
+          {step.kind === 'busy' ? step.label : change.status === 'failed' ? 'Try again' : 'Approve'}
         </button>
       )}
       {change.status === 'applied' && (
@@ -163,7 +164,6 @@ function ChangeCard(props: {
             ))}
         </p>
       )}
-      {change.status === 'failed' && <p className="text-lg text-red-700">Failed: {change.error ?? 'unknown error'}</p>}
       {step.kind === 'signed' && (
         <div className="text-green-700">
           <p className="text-lg">Signed by {shortAddress(step.account)}. Not sent (mock mode).</p>
