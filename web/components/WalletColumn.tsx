@@ -36,10 +36,10 @@ export function WalletColumn({ title, rule, icon, address, explorerUrl, story, e
               <span className="text-[13px] text-faint">{rule}</span>
             </div>
           </div>
-          {address && explorerUrl && (
-            <a className="font-mono text-[13px] font-medium text-link hover:underline" href={`${explorerUrl}/address/${address}`} target="_blank" rel="noreferrer">
+          {address && (
+            <ExplorerLink href={explorerUrl && `${explorerUrl}/address/${address}`} className="text-[13px] font-medium">
               {shortAddress(address)}
-            </a>
+            </ExplorerLink>
           )}
         </div>
         <Outcome headline={story.headline} />
@@ -185,13 +185,20 @@ function StepRow({ step, explorerUrl }: { step: Step; explorerUrl: string | unde
         <span className="text-sm font-medium text-ink">{step.title}</span>
         {meta && <span className="text-xs text-faint">{meta}</span>}
       </span>
-      {step.txHash && explorerUrl && (
-        <a className="pt-0.5 font-mono text-xs whitespace-nowrap text-link hover:underline" href={txUrl(explorerUrl, step.txHash)} target="_blank" rel="noreferrer">
+      {step.txHash && (
+        <ExplorerLink href={explorerUrl && txUrl(explorerUrl, step.txHash)} className="pt-0.5 text-xs">
           {shortAddress(step.txHash)}
-        </a>
+        </ExplorerLink>
       )}
     </li>
   );
+}
+
+/** A link on a chain with an explorer. Anvil has none, so there it is the plain hash or address. */
+function ExplorerLink({ href, className, children }: { href: string | undefined; className: string; children: ReactNode }) {
+  const mono = `font-mono whitespace-nowrap ${className}`;
+  if (!href) return <span className={`${mono} text-faint`}>{children}</span>;
+  return <a className={`${mono} text-link hover:underline`} href={href} target="_blank" rel="noreferrer">{children}</a>;
 }
 
 /** "18:42:07" in the viewer's time zone. */

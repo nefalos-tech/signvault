@@ -36,7 +36,7 @@ export function PendingChangesPanel({ state }: { state: AppState | undefined }) 
                 <span className="text-sm font-semibold">{describeChange(c, state?.vendors ?? [])}</span>
                 <span className="text-xs text-faint">
                   Requested by the agent · nonce <span className="font-mono">{c.nonce}</span>
-                  {c.txHash && state && (
+                  {c.txHash && state?.explorerUrl && (
                     <>
                       {' · '}
                       <a className="text-link hover:underline" href={txUrl(state.explorerUrl, c.txHash)} target="_blank" rel="noreferrer">view tx</a>
