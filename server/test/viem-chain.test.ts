@@ -3,15 +3,18 @@ import { createPublicClient, createTestClient, createWalletClient, http, parseEt
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { anvil } from 'viem/chains';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { INVOICE_AMOUNT, STARTING_BALANCE, VENDORS, setPayeeTypedData, type ChainPort, type Hex, type TxResult } from '@signvault/shared';
+import {
+  INVOICE_AMOUNT, STARTING_BALANCE, VENDORS, rearmTypedData, setPayeeTypedData, type ChainPort, type Hex, type TxResult,
+} from '@signvault/shared';
 import { loadDeployment, type Deployment } from '@signvault/shared/deployments';
 import { createViemChain } from '../src/chain/viem';
 
 // Runs the spec 4 table on anvil against `pnpm deploy:local`. Skips, with the reason, when either is missing.
+// Every anvil suite lives in this one file, so vitest runs them in turn and their snapshots never overlap.
 const rpcUrl = process.env.ANVIL_RPC_URL ?? 'http://127.0.0.1:8545';
 const deploymentFile = new URL('../../deployments/31337.json', import.meta.url);
 
-async function whyNotRunnable(): Promise<string | undefined> {
+async function whyNotRunnable(file = deploymentFile): Promise<string | undefined> {
   try {
     const res = await fetch(rpcUrl, {
       method: 'POST',
@@ -24,7 +27,7 @@ async function whyNotRunnable(): Promise<string | undefined> {
   } catch {
     return `anvil does not answer at ${rpcUrl}`;
   }
-  if (!existsSync(deploymentFile)) return 'deployments/31337.json is missing: run `pnpm deploy:local`';
+  if (!existsSync(file)) return `${file.pathname.split('/').pop()} is missing: run ${file === deploymentFile ? '`pnpm deploy:local`' : 'the treasury deploy'}`;
   return undefined;
 }
 
@@ -155,5 +158,85 @@ describe.skipIf(skipReason !== undefined)('viem ChainPort on anvil', () => {
 
     const last = createViemChain({ rpcUrl, deployment: d, agent: d.agent, operator: d.operator, pair: d.pairs.length - 1 });
     await expect(last.nextPair()).rejects.toThrow(/all \d+ wallet pairs are used/);
+  });
+});
+
+// Cards T2 and T3 on anvil, against a treasury deployment (deployments/31337-treasury.json, from the treasury deploy
+// script). Skips, with the reason, when anvil or the file is missing. The tripwire tests run only on a TripwireVault.
+const which = '31337-treasury';
+
+const treasurySkip = await whyNotRunnable(new URL(`../../deployments/${which}.json`, import.meta.url));
+if (treasurySkip) process.stderr.write(`viem-chain.test.ts treasury suite skipped: ${treasurySkip}\n`);
+
+describe.skipIf(treasurySkip !== undefined)('viem ChainPort treasury on anvil', () => {
+  const client = createPublicClient({ chain: anvil, transport: http(rpcUrl) });
+  const signer = createWalletClient({ chain: anvil, transport: http(rpcUrl) });
+  const node = createTestClient({ chain: anvil, mode: 'anvil', transport: http(rpcUrl) });
+  let d: Deployment;
+  let chain: ChainPort;
+  let snapshot: Hex;
+
+  async function expectRefused(result: TxResult, error: string) {
+    expect(result).toMatchObject({ ok: false, error, txHash: expect.stringMatching(/^0x[0-9a-f]{64}$/) });
+    expect((await client.getTransactionReceipt({ hash: result.txHash! })).status).toBe('reverted');
+    expect((await client.getTransaction({ hash: result.txHash! })).gas).toBe(200_000n);
+  }
+
+  async function expectSent(result: TxResult) {
+    expect(result).toMatchObject({ ok: true });
+    expect((await client.getTransactionReceipt({ hash: result.txHash! })).status).toBe('success');
+  }
+
+  beforeAll(async () => {
+    snapshot = await node.snapshot();
+    d = loadDeployment(which as unknown as number);
+    chain = createViemChain({ rpcUrl, deployment: d, agent: d.agent, operator: d.operator });
+  });
+
+  afterAll(async () => {
+    if (snapshot) await node.revert({ id: snapshot });
+  });
+
+  it('reads the sleeve: no T-bills yet, and Vendor 1 owed this period', async () => {
+    const { addresses, signvault } = await chain.readState();
+    expect(addresses.mockUsdy).toBe(d.mockUsdy);
+    expect(signvault).toMatchObject({ tbillShares: '0', tbillValue: '0', owedThisPeriod: INVOICE_AMOUNT.toString() });
+  });
+
+  it('refuses, on chain, a sweep that dips into unpaid payroll', async () => {
+    const cash = BigInt((await chain.readState()).signvault.balance);
+    await expectRefused(await chain.vaultSweep(cash - INVOICE_AMOUNT + 1n), 'SweepDipsIntoPayroll');
+  });
+
+  it('sweeps the spare cash and keeps the payroll floor in cash, then pays Vendor 1 from it', async () => {
+    const cash = BigInt((await chain.readState()).signvault.balance);
+    await expectSent(await chain.vaultSweep(cash - INVOICE_AMOUNT));
+    const { signvault } = await chain.readState();
+    expect(signvault.balance).toBe(INVOICE_AMOUNT.toString());
+    expect(BigInt(signvault.tbillShares!)).toBeGreaterThan(0n);
+    await expectSent(await chain.vaultPay(VENDORS[0]!.address));
+    expect((await chain.readState()).signvault).toMatchObject({ balance: '0', owedThisPeriod: '0' });
+  });
+
+  it('redeems shares back to cash', async () => {
+    const shares = BigInt((await chain.readState()).signvault.tbillShares!);
+    await expectSent(await chain.vaultRedeem(shares / 2n));
+    expect(BigInt((await chain.readState()).signvault.tbillShares!)).toBe(shares - shares / 2n);
+  });
+
+  it('trips, locks sweeping, and re-arms only with the owner signature', async (ctx) => {
+    if ((await chain.readState()).signvault.tripwire === undefined) ctx.skip(); // a TBillSignVault has no tripwire
+    await expectSent(await chain.vaultTrip());
+    const tripped = await chain.readState();
+    expect(tripped.signvault).toMatchObject({ tbillShares: '0', tripwire: { tripped: true } });
+    await expectRefused(await chain.vaultSweep(1n), 'SweepLocked');
+
+    // The owner is an anvil dev account, so anvil signs for it: no key in the test.
+    const typed = rearmTypedData({ chainId: anvil.id, vault: tripped.addresses.signVault, nonce: BigInt(tripped.signvault.nonce) });
+    await expectRefused(await chain.vaultRearm(await signer.signTypedData({ account: d.agent, ...typed })), 'OwnerApprovalRequired');
+    const approval = await signer.signTypedData({ account: d.owner, ...typed });
+    await expectSent(await chain.vaultRearm(approval));
+    expect((await chain.readState()).signvault.tripwire?.tripped).toBe(false);
+    await expectRefused(await chain.vaultRearm(approval), 'OwnerApprovalRequired');
   });
 });

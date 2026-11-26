@@ -29,3 +29,23 @@ export function setPayeeTypedData({ chainId, vault, to, amount, nonce }: SetPaye
     message: { to, amount, nonce },
   } as const;
 }
+
+/** Card T3: the owner re-arms a tripped TripwireVault. It uses the vault's one nonce, the same as SetPayee. */
+export const rearmTypes = {
+  Rearm: [{ name: 'nonce', type: 'uint256' }],
+} as const;
+
+export interface RearmRequest {
+  chainId: number;
+  vault: Address;
+  nonce: bigint;
+}
+
+export function rearmTypedData({ chainId, vault, nonce }: RearmRequest) {
+  return {
+    domain: signVaultDomain(chainId, vault),
+    types: rearmTypes,
+    primaryType: 'Rearm',
+    message: { nonce },
+  } as const;
+}

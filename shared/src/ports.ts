@@ -9,6 +9,11 @@ export interface ChainPort {
   vaultPay(to: Address): Promise<TxResult>;                           // agent key
   vaultSetPayee(to: Address, amount: bigint, approval: Hex, as: 'agent' | 'operator'): Promise<TxResult>;
   nextPair(): Promise<void>;                                          // move to a fresh wallet pair
+  // Cards T2 and T3 (#57). On a deployment with no treasury they return { ok: false, error: 'NoTreasury' } and send nothing.
+  vaultSweep(assets: bigint): Promise<TxResult>;                      // agent key: spare cash into T-bills
+  vaultRedeem(shares: bigint): Promise<TxResult>;                     // agent key: T-bills back to cash
+  vaultTrip(): Promise<TxResult>;                                     // agent key: everything back to cash, sweeping locked
+  vaultRearm(approval: Hex): Promise<TxResult>;                       // operator relays the owner's Rearm signature
 }
 
 export interface InboxPort {

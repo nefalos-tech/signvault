@@ -10,10 +10,12 @@ import {
   type Hex,
   type PendingChange,
   type RunEvent,
+  type TxResult,
 } from '@signvault/shared';
 import { createApp, type AppDeps, type RunWallet } from '../src/app';
 import { COMPANY_INBOX, MemoryInbox } from '../src/inbox';
 import { MemoryEvents } from '../src/events';
+import { PriceFeed } from '../src/price/feed';
 
 const ADDR = (n: number) => `0x${n.toString(16).padStart(40, '0')}` as Address;
 
@@ -28,14 +30,28 @@ const chainState = {
 
 const unused = () => Promise.reject(new Error('not used by the HTTP shell'));
 
-function setup() {
+const NAV = 10n ** 18n;
+/** A treasury vault: 9.99 mUSD in T-bills, Vendor 1 still owed, the tripwire armed. */
+const treasuryState = {
+  ...chainState,
+  signvault: {
+    ...chainState.signvault, tbillShares: '9990000000000000000', tbillValue: '9990000000000000000', owedThisPeriod: INVOICE_AMOUNT.toString(),
+    tripwire: { tripped: false, usdyPrice: null, redemptionValue: NAV.toString(), simulated: false },
+  },
+};
+
+function setup(state: Awaited<ReturnType<ChainPort['readState']>> = chainState) {
   const chain = {
-    readState: async () => chainState,
+    readState: async () => state,
     baselinePay: unused,
     baselineSetDailyCap: unused,
     vaultPay: unused,
     vaultSetPayee: unused,
     nextPair: unused,
+    vaultSweep: unused,
+    vaultRedeem: unused,
+    vaultTrip: unused,
+    vaultRearm: unused,
   } satisfies ChainPort;
 
   const changes: PendingChange[] = [
@@ -56,7 +72,8 @@ function setup() {
 
   const inbox = new MemoryInbox();
   const events = new MemoryEvents();
-  const runs: RunWallet[] = [];
+  const runs: string[] = [];
+  const rearmed: Hex[] = [];
   let resets = 0;
 
   const deps: AppDeps = {
@@ -64,9 +81,14 @@ function setup() {
     inbox,
     events,
     approvals,
-    startRun: async (wallet) => {
-      runs.push(wallet);
+    startRun: async (wallet: RunWallet, task) => {
+      runs.push(task ? `${wallet}:${task}` : wallet);
       return wallet === 'both' ? ['run-1', 'run-2'] : ['run-1'];
+    },
+    prices: new PriceFeed(),
+    rearm: async (signature): Promise<TxResult> => {
+      rearmed.push(signature);
+      return { ok: true, txHash: '0xfeed' };
     },
     reset: async () => {
       resets++;
@@ -74,7 +96,7 @@ function setup() {
       inbox.deliver({ from: 'billing@vendor1.test', to: COMPANY_INBOX, subject: 'Invoice 1', body: '0.01 mUSD' });
     },
   };
-  return { app: createApp(deps), inbox, events, approvals, approved, runs, resets: () => resets };
+  return { app: createApp(deps), deps, inbox, events, approvals, approved, runs, rearmed, resets: () => resets };
 }
 
 const post = (body: unknown) => ({
@@ -277,5 +299,57 @@ describe('GET /api/events', () => {
     await sse.cancel();
     await new Promise((r) => setTimeout(r, 10));
     expect(listening).toBe(0);
+  });
+});
+
+describe('treasury routes (cards T2 and T3)', () => {
+  it("POST /api/runs starts SignVault's treasury task", async () => {
+    const { app, runs } = setup();
+    const res = await app.request('/api/runs', post({ wallet: 'signvault', task: 'treasury' }));
+    expect(res.status).toBe(200);
+    expect(runs).toEqual(['signvault:treasury']);
+  });
+
+  it.each([
+    { wallet: 'both', task: 'treasury' },
+    { wallet: 'baseline', task: 'treasury' },
+    { wallet: 'signvault', task: 'nope' },
+  ])('POST /api/runs refuses %j with 400', async (body) => {
+    const { app, runs } = setup();
+    expect((await app.request('/api/runs', post(body))).status).toBe(400);
+    expect(runs).toEqual([]);
+  });
+
+  it('GET /api/state leaves a state with no tripwire as it is', async () => {
+    const { app } = setup();
+    expect(((await (await app.request('/api/state')).json()) as AppState).signvault).toEqual(chainState.signvault);
+  });
+
+  it('POST /api/admin/price-shock turns the simulated shock on and off, and the state says simulated', async () => {
+    const { app } = setup(treasuryState);
+    const on = (await (await app.request('/api/admin/price-shock', post({ on: true }))).json()) as AppState;
+    expect(on.signvault.tripwire).toEqual({ tripped: false, usdyPrice: (NAV * 9n / 10n).toString(), redemptionValue: NAV.toString(), simulated: true });
+    const off = (await (await app.request('/api/admin/price-shock', post({ on: false }))).json()) as AppState;
+    expect(off.signvault.tripwire).toEqual({ tripped: false, usdyPrice: null, redemptionValue: NAV.toString(), simulated: false });
+    expect(treasuryState.signvault.tripwire.simulated).toBe(false); // the chain's own state is never overwritten
+  });
+
+  it.each([{ on: 'yes' }, {}])('POST /api/admin/price-shock refuses %j with 400', async (body) => {
+    const { app } = setup(treasuryState);
+    expect((await app.request('/api/admin/price-shock', post(body))).status).toBe(400);
+  });
+
+  it("POST /api/vault/rearm relays the owner's signature and returns the transaction", async () => {
+    const { app, rearmed } = setup(treasuryState);
+    const res = await app.request('/api/vault/rearm', post({ signature: '0xabcd' }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, txHash: '0xfeed' });
+    expect(rearmed).toEqual(['0xabcd']);
+  });
+
+  it('POST /api/vault/rearm refuses a signature that is not hex with 400', async () => {
+    const { app, rearmed } = setup(treasuryState);
+    expect((await app.request('/api/vault/rearm', post({ signature: 'nope' }))).status).toBe(400);
+    expect(rearmed).toEqual([]);
   });
 });

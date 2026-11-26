@@ -19,10 +19,12 @@ interface Props {
   story: ColumnStory;
   events: RunEvent[];
   children?: ReactNode;
+  /** A section under the timeline, such as SignVault's treasury panel. */
+  footer?: ReactNode;
 }
 
 /** One side of the dashboard: the outcome, three numbers, the attack path, the key steps, and the raw feed. */
-export function WalletColumn({ title, rule, icon, address, explorerUrl, story, events, children }: Props) {
+export function WalletColumn({ title, rule, icon, address, explorerUrl, story, events, children, footer }: Props) {
   return (
     <section className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-line bg-white shadow-xs">
       <div className="flex flex-col gap-3.5 px-4 pt-5 pb-4 sm:px-6">
@@ -71,6 +73,7 @@ export function WalletColumn({ title, rule, icon, address, explorerUrl, story, e
           </div>
         </details>
       </div>
+      {footer}
     </section>
   );
 }
@@ -173,7 +176,7 @@ const STEP: Record<StepKind, { row: string; icon: string }> = {
   wait: { row: 'bg-wait-50', icon: 'bg-wait-50 text-wait-700' },
 };
 
-function StepRow({ step, explorerUrl }: { step: Step; explorerUrl: string | undefined }) {
+export function StepRow({ step, explorerUrl }: { step: Step; explorerUrl: string | undefined }) {
   const t = STEP[step.kind];
   const meta = [step.ts !== undefined && clock(step.ts), step.detail].filter(Boolean).join(' · ');
   return (
@@ -195,7 +198,7 @@ function StepRow({ step, explorerUrl }: { step: Step; explorerUrl: string | unde
 }
 
 /** A link on a chain with an explorer. Anvil has none, so there it is the plain hash or address. */
-function ExplorerLink({ href, className, children }: { href: string | undefined; className: string; children: ReactNode }) {
+export function ExplorerLink({ href, className, children }: { href: string | undefined; className: string; children: ReactNode }) {
   const mono = `font-mono whitespace-nowrap ${className}`;
   if (!href) return <span className={`${mono} text-faint`}>{children}</span>;
   return <a className={`${mono} text-link hover:underline`} href={href} target="_blank" rel="noreferrer">{children}</a>;
