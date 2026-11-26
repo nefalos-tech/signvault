@@ -1,0 +1,58 @@
+{
+  "agent": "0x681854A983AD381706aa7304951b175270640043",
+  "attacker": "0x08324C0cba6EcF6AfC1A35E5E69483428bbE13dD",
+  "chainId": 97,
+  "explorerUrl": "https://testnet.bscscan.com",
+  "mockUsd": "0x7B6562e1E8cde2AF559e9f33C92c812e149cA7A8",
+  "mockUsdy": "0x778c4A14155Ce8c46cAB4Bcf074d37555822b411",
+  "operator": "0x144B7220eBB6b2E22C330b453A434A1728b13912",
+  "owner": "0xCFccC57E3Ec82227CAeb906eD74D0999281E024E",
+  "pairs": [
+    {
+      "baselineWallet": "0xfE563d2A62B9999B4a1E9c8B0335BA7382a9B5b8",
+      "signVault": "0x2F14D17076BD2A087E02BbCd5B057c9deb8c4F4A"
+    },
+    {
+      "baselineWallet": "0x84C415a5914A30850F09DDE78eA92a9880571C1d",
+      "signVault": "0xaC9dc71F2bC81f2b9B63122bEB925166762FA09F"
+    },
+    {
+      "baselineWallet": "0x62937d619Fb3f0aeD484C1c0CA69B27EB07eD1BD",
+      "signVault": "0xBf6ABCCa41C45AF3c96F89a7f1c1e932cd5fD78C"
+    },
+    {
+      "baselineWallet": "0x42C618206442Dd81A73AE754f62bFE1a6aCdFe06",
+      "signVault": "0xA78B53bc429801002a20d6c6191629d913EE1175"
+    },
+    {
+      "baselineWallet": "0xe91a8E57b2aC0b86C7583EB40488F9f5d4328573",
+      "signVault": "0x815D1C42b83f395883B5ef995661867d046a41C6"
+    },
+    {
+      "baselineWallet": "0xE53737fc1Ce929540F1287553FA591e8C2C432c5",
+      "signVault": "0xD8B95fa364cF2AbCCBFe167390B94000D6596413"
+    },
+    {
+      "baselineWallet": "0x6c30Ae7ACE0FE1326a8e27Dc867fAdc2329EfDe1",
+      "signVault": "0x5Ca41649d7E29665A8B1C10187E37439B88c8Fb8"
+    },
+    {
+      "baselineWallet": "0x9eA379474F83FEfA7BB5A1f0DfDA8d256Dc871c0",
+      "signVault": "0x6C4044DCa3592EE4E88A83FA8BDabC3E8DdC0F75"
+    }
+  ],
+  "vendors": [
+    {
+      "address": "0x63c4E507E171CA1FD9A3638502ee278c16D04B2C",
+      "name": "Vendor 1"
+    },
+    {
+      "address": "0xE0C855b40fbC11530989c2205b5C723848ba9E3A",
+      "name": "Vendor 2"
+    },
+    {
+      "address": "0xACc27d04316e225ecb340C0bB7D8B6BA482B03cD",
+      "name": "Vendor 3"
+    }
+  ]
+}
