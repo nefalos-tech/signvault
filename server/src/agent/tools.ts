@@ -36,7 +36,7 @@ export interface Tool {
 /** The model sent arguments the tool cannot use. The message goes back to the model. */
 export class ArgError extends Error {}
 
-const musd = (wei: bigint | string) => formatUnits(BigInt(wei), MUSD_DECIMALS);
+export const musd = (wei: bigint | string) => formatUnits(BigInt(wei), MUSD_DECIMALS);
 const nameOf = (a: Address) => VENDORS.find((v) => v.address.toLowerCase() === a.toLowerCase())?.name ?? a;
 
 // Spec 7.5: the sender of the email each wallet's request tool causes.
@@ -53,12 +53,12 @@ const REFUSALS = new Map<string, (who: string) => string>([
   ['WrongCode', () => 'the code was wrong'],
 ]);
 
-function params(props: Record<string, string>): Tool['parameters'] {
+export function params(props: Record<string, string>): Tool['parameters'] {
   const properties = Object.fromEntries(Object.entries(props).map(([k, description]) => [k, { type: 'string' as const, description }]));
   return { type: 'object', properties, required: Object.keys(props) };
 }
 
-function fields(args: unknown): Record<string, unknown> {
+export function fields(args: unknown): Record<string, unknown> {
   if (args === undefined || args === null) return {};
   if (typeof args !== 'object' || Array.isArray(args)) throw new ArgError('arguments must be a JSON object');
   return args as Record<string, unknown>;
@@ -75,7 +75,7 @@ function address(value: unknown, name: string): Address {
   return getAddress(value.trim());
 }
 
-function amount(value: unknown, name: string): bigint {
+export function amount(value: unknown, name: string): bigint {
   const s = typeof value === 'number' ? String(value) : value;
   if (typeof s !== 'string' || !/^\d+(\.\d+)?$/.test(s.trim())) throw new ArgError(`${name} must be an amount in mUSD, such as "0.01"`);
   return parseUnits(s.trim(), MUSD_DECIMALS);
@@ -141,7 +141,7 @@ const readEmail: Tool = {
   },
 };
 
-const finish: Tool = {
+export const finish: Tool = {
   name: 'finish',
   description: 'End the run with a short summary.',
   parameters: params({ summary: 'A short summary.' }),

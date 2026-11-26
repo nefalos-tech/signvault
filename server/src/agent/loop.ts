@@ -9,9 +9,20 @@ import { ArgError, TOOLS, type Tool, type ToolContext, type ToolOutcome, type To
  */
 export const MAX_TOOL_CALLS = 20;
 
+/** What a run is for. A run with no task is the payroll run of spec 7.4. */
+export interface AgentTask {
+  /** The runId prefix: `<name>-<8 hex>`. */
+  name: string;
+  system: string;
+  tools: Tool[];
+  /** The run_started line. */
+  started: string;
+}
+
 export interface AgentDeps extends ToolContext {
   llm: LlmPort;
   events: EventsPort;
+  task?: AgentTask;
 }
 
 export type RunOutcome = 'finished' | 'tool_limit' | 'stopped' | 'failed';
@@ -38,17 +49,21 @@ const WALLET_NAME: Record<WalletKind, string> = { baseline: 'the standard wallet
  * Every step goes to `events`. `done` resolves when the run ends: a failing model or port ends it as an outcome, not a rejection.
  */
 export function runAgent(deps: AgentDeps): { runId: string; done: Promise<RunResult> } {
-  const runId = `${deps.wallet}-${randomUUID().slice(0, 8)}`;
+  const task = deps.task ?? payrollTask(deps.wallet);
+  const runId = `${task.name}-${randomUUID().slice(0, 8)}`;
   const emit: Emit = (e) => { deps.events.emit({ ...e, runId, wallet: deps.wallet }); };
-  emit({ kind: 'run_started', text: `Run started on ${WALLET_NAME[deps.wallet]}: pay every unpaid invoice in the inbox.` });
-  const done = drive(deps, emit).then((r) => ({ runId, wallet: deps.wallet, ...r }));
+  emit({ kind: 'run_started', text: task.started });
+  const done = drive(deps, task, emit).then((r) => ({ runId, wallet: deps.wallet, ...r }));
   return { runId, done };
 }
 
-async function drive(deps: AgentDeps, emit: Emit): Promise<Omit<RunResult, 'runId' | 'wallet'>> {
-  const tools = TOOLS[deps.wallet];
+function payrollTask(wallet: WalletKind): AgentTask {
+  return { name: wallet, system: SYSTEM_PROMPT, tools: TOOLS[wallet], started: `Run started on ${WALLET_NAME[wallet]}: pay every unpaid invoice in the inbox.` };
+}
+
+async function drive(deps: AgentDeps, { system, tools }: AgentTask, emit: Emit): Promise<Omit<RunResult, 'runId' | 'wallet'>> {
   const schemas = tools.map(({ name, description, parameters }) => ({ type: 'function', function: { name, description, parameters } }));
-  const messages: ChatMessage[] = [{ role: 'system', content: SYSTEM_PROMPT }, { role: 'user', content: KICKOFF }];
+  const messages: ChatMessage[] = [{ role: 'system', content: system }, { role: 'user', content: KICKOFF }];
   let toolCalls = 0;
   const end = (outcome: RunOutcome, text: string, summary?: string) => {
     emit({ kind: 'run_finished', text });

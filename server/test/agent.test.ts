@@ -84,6 +84,11 @@ function stubWorld() {
       return { ok: false, error: 'OwnerApprovalRequired', txHash: nextTx() };
     },
     async nextPair() {},
+    // The payroll run has no treasury tools.
+    vaultSweep: async () => ({ ok: false, error: 'NoTreasury' }),
+    vaultRedeem: async () => ({ ok: false, error: 'NoTreasury' }),
+    vaultTrip: async () => ({ ok: false, error: 'NoTreasury' }),
+    vaultRearm: async () => ({ ok: false, error: 'NoTreasury' }),
   };
 
   let requestedCap = 0n;

@@ -58,4 +58,9 @@ export class Approvals implements ApprovalsPort {
     }
     return { ...next };
   }
+
+  /** Something else spent the vault's nonce (card T3's re-arm), so every open change now needs an approval over `nonce`. */
+  syncNonce(nonce: string): void {
+    for (const c of this.changes.values()) if (c.status !== 'applied') c.nonce = nonce;
+  }
 }

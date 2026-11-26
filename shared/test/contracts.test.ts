@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { baselineWalletAbi, mockUsdAbi, signVaultAbi } from '../src/abi';
+import { baselineWalletAbi, mockUsdAbi, mockUsdyAbi, signVaultAbi, tBillSignVaultAbi, tripwireVaultAbi } from '../src/abi';
 import { ATTACKER, ATTACKER_LABEL, labelKey, VENDOR_LABELS, VENDORS } from '../src/scenario';
 
 const contractsDir = new URL('../../contracts/', import.meta.url).pathname;
@@ -30,6 +30,19 @@ describe('abi.ts matches the Solidity sources', () => {
 
   it.skipIf(!existsSync(`${contractsDir}src/MockUSD.sol`))('MockUSD', () => {
     expect(normalize(mockUsdAbi)).toEqual(normalize(forgeAbi('MockUSD')));
+  });
+
+  it('MockUSDY', () => {
+    expect(normalize(mockUsdyAbi)).toEqual(normalize(forgeAbi('MockUSDY')));
+  });
+
+  // These two ABIs hold only what each contract adds to the one below it, so each entry must be in the contract.
+  it('TBillSignVault has every entry of tBillSignVaultAbi', () => {
+    expect(normalize(forgeAbi('TBillSignVault'))).toEqual(expect.arrayContaining(normalize(tBillSignVaultAbi)));
+  });
+
+  it('TripwireVault has every entry of tripwireVaultAbi', () => {
+    expect(normalize(forgeAbi('TripwireVault'))).toEqual(expect.arrayContaining(normalize(tripwireVaultAbi)));
   });
 });
 

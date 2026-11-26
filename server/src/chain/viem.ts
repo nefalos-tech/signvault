@@ -1,6 +1,7 @@
 import {
   BaseError,
   ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
   createPublicClient,
   createWalletClient,
   http,
@@ -11,7 +12,10 @@ import { anvil, bscTestnet } from 'viem/chains';
 import {
   baselineWalletAbi,
   mockUsdAbi,
+  mockUsdyAbi,
   signVaultAbi,
+  tBillSignVaultAbi,
+  tripwireVaultAbi,
   type Address,
   type ChainPort,
   type TxResult,
@@ -27,6 +31,13 @@ const CHAINS = { [anvil.id]: anvil, [bscTestnet.id]: bscTestnet } as const;
 const tokenErrors = mockUsdAbi.filter((item) => item.type === 'error');
 const baselineAbi = [...baselineWalletAbi, ...tokenErrors] as const;
 const vaultAbi = [...signVaultAbi, ...tokenErrors] as const;
+// Cards T2 and T3: the treasury calls go through MockUSDY, so its ERC4626 errors can bubble up too.
+const treasuryAbi = [
+  ...signVaultAbi, ...tBillSignVaultAbi, ...tripwireVaultAbi,
+  ...mockUsdyAbi.filter((item) => item.type === 'error'),
+] as const;
+const ONE_SHARE = 10n ** 18n;
+const NO_TREASURY: TxResult = { ok: false, error: 'NoTreasury' };
 
 export interface ViemChainOptions {
   rpcUrl: string;
@@ -67,6 +78,42 @@ export function createViemChain({ rpcUrl, deployment, agent, operator, pair = 0 
     return deployment.pairs[current]!;
   }
 
+  function treasury(call: () => Promise<TxResult>): Promise<TxResult> {
+    return deployment.mockUsdy ? call() : Promise.resolve(NO_TREASURY);
+  }
+
+  /** TBillSignVault's sleeve, plus TripwireVault's flag when the vault has one. The chain knows no market price. */
+  async function readTreasury(mockUsdy: Address, signVault: Address) {
+    const read = publicClient.readContract;
+    const [shares, owed, redemptionValue, tripped] = await Promise.all([
+      read({ address: mockUsdy, abi: mockUsdyAbi, functionName: 'balanceOf', args: [signVault] }),
+      read({ address: signVault, abi: tBillSignVaultAbi, functionName: 'owedThisPeriod' }),
+      read({ address: mockUsdy, abi: mockUsdyAbi, functionName: 'convertToAssets', args: [ONE_SHARE] }),
+      readTripped(signVault),
+    ]);
+    const value = await read({ address: mockUsdy, abi: mockUsdyAbi, functionName: 'convertToAssets', args: [shares] });
+    return {
+      tbillShares: shares.toString(),
+      tbillValue: value.toString(),
+      owedThisPeriod: owed.toString(),
+      ...(tripped !== undefined && {
+        tripwire: { tripped, usdyPrice: null, redemptionValue: redemptionValue.toString(), simulated: false },
+      }),
+    };
+  }
+
+  /** `tripped()`, or undefined for a TBillSignVault, which has no tripwire. Any other failure is rethrown. */
+  async function readTripped(signVault: Address): Promise<boolean | undefined> {
+    try {
+      return await publicClient.readContract({ address: signVault, abi: tripwireVaultAbi, functionName: 'tripped' });
+    } catch (e) {
+      const missing = e instanceof BaseError
+        && e.walk((x) => x instanceof ContractFunctionRevertedError || x instanceof ContractFunctionZeroDataError);
+      if (missing) return undefined;
+      throw e;
+    }
+  }
+
   return {
     async readState() {
       const { baselineWallet, signVault } = wallets();
@@ -83,17 +130,19 @@ export function createViemChain({ rpcUrl, deployment, agent, operator, pair = 0 
       const paid = await Promise.all(
         payees.map((p) => read({ address: signVault, abi: signVaultAbi, functionName: 'paidInPeriod', args: [p.to, period] })),
       );
+      const addresses = { mockUsd: deployment.mockUsd, baselineWallet, signVault, owner: deployment.owner, agent: deployment.agent };
+      const signvault = {
+        balance: vaultBalance.toString(),
+        nonce: nonce.toString(),
+        payees: payees.map((p, i) => ({ to: p.to, amount: p.amount.toString(), paidThisPeriod: paid[i]! })),
+      };
       return {
         chainId: deployment.chainId,
         explorerUrl: deployment.explorerUrl,
-        addresses: { mockUsd: deployment.mockUsd, baselineWallet, signVault, owner: deployment.owner, agent: deployment.agent },
+        addresses: deployment.mockUsdy ? { ...addresses, mockUsdy: deployment.mockUsdy } : addresses,
         vendors: deployment.vendors,
         baseline: { balance: baselineBalance.toString(), dailyCap: dailyCap.toString(), spentToday: spentToday.toString() },
-        signvault: {
-          balance: vaultBalance.toString(),
-          nonce: nonce.toString(),
-          payees: payees.map((p, i) => ({ to: p.to, amount: p.amount.toString(), paidThisPeriod: paid[i]! })),
-        },
+        signvault: deployment.mockUsdy ? { ...signvault, ...(await readTreasury(deployment.mockUsdy, signVault)) } : signvault,
       };
     },
 
@@ -102,6 +151,11 @@ export function createViemChain({ rpcUrl, deployment, agent, operator, pair = 0 
     vaultPay: (to) => send(agent, wallets().signVault, vaultAbi, 'pay', [to]),
     vaultSetPayee: (to, amount, approval, as) =>
       send(as === 'agent' ? agent : operator, wallets().signVault, vaultAbi, 'setPayee', [to, amount, approval]),
+
+    vaultSweep: (assets) => treasury(() => send(agent, wallets().signVault, treasuryAbi, 'sweep', [assets])),
+    vaultRedeem: (shares) => treasury(() => send(agent, wallets().signVault, treasuryAbi, 'redeem', [shares])),
+    vaultTrip: () => treasury(() => send(agent, wallets().signVault, treasuryAbi, 'trip', [])),
+    vaultRearm: (approval) => treasury(() => send(operator, wallets().signVault, treasuryAbi, 'rearm', [approval])),
 
     async nextPair() {
       if (current + 1 >= deployment.pairs.length) {

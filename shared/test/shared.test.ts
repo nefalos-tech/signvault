@@ -2,7 +2,7 @@ import { verifyTypedData } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { describe, expect, it } from 'vitest';
 import { loadDeployment } from '../src/deployments';
-import { setPayeeTypedData } from '../src/eip712';
+import { rearmTypedData, setPayeeTypedData } from '../src/eip712';
 import {
   ATTACKER, BASELINE_DAILY_CAP, FAKE_KEY_LABELS, INVOICE_AMOUNT, labelAddress, labelKey,
   PAIR_COUNT, STARTING_BALANCE, VENDORS,
@@ -48,5 +48,27 @@ describe('setPayeeTypedData', () => {
     const otherVault = setPayeeTypedData({ ...request, vault: d.pairs[1].signVault });
     expect(await verifyTypedData({ address: d.owner, signature, ...replay })).toBe(false);
     expect(await verifyTypedData({ address: d.owner, signature, ...otherVault })).toBe(false);
+  });
+});
+
+describe('rearmTypedData', () => {
+  const d = loadDeployment('fake');
+  const owner = privateKeyToAccount(labelKey(FAKE_KEY_LABELS.owner));
+  const request = { chainId: d.chainId, vault: d.pairs[0].signVault, nonce: 3n };
+
+  it('is Rearm(uint256 nonce) on the SignVault domain', () => {
+    expect(rearmTypedData(request)).toEqual({
+      domain: { name: 'SignVault', version: '1', chainId: d.chainId, verifyingContract: d.pairs[0].signVault },
+      types: { Rearm: [{ name: 'nonce', type: 'uint256' }] },
+      primaryType: 'Rearm',
+      message: { nonce: 3n },
+    });
+  });
+
+  it('binds the signature to the nonce and the vault', async () => {
+    const signature = await owner.signTypedData(rearmTypedData(request));
+    expect(await verifyTypedData({ address: d.owner, signature, ...rearmTypedData(request) })).toBe(true);
+    expect(await verifyTypedData({ address: d.owner, signature, ...rearmTypedData({ ...request, nonce: 4n }) })).toBe(false);
+    expect(await verifyTypedData({ address: d.owner, signature, ...rearmTypedData({ ...request, vault: d.pairs[1].signVault }) })).toBe(false);
   });
 });
