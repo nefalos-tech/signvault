@@ -34,7 +34,7 @@ export default async function HeistPage() {
         <p className="text-neutral-600">
           Below is the private key of this vault&apos;s agent on {view.chainName}. It is the key an AI agent would hold. Use it
           however you like and try to send the vault&apos;s mUSD to an address that is not on its payee list. Every transaction
-          the vault refuses is counted here, read from the chain.
+          sent straight to the vault that reverts is counted here, read from the chain.
         </p>
       </header>
 
@@ -51,8 +51,8 @@ export default async function HeistPage() {
       <section className="flex flex-col gap-3 rounded-xl border border-neutral-200 p-4">
         <h2 className="text-lg font-semibold">The agent key</h2>
         <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-          This is a testnet key, published for this challenge only. It is the agent of this one vault and nothing else. mUSD is a
-          test token with no value, and gas is paid in test BNB. Do not send real funds to this address.
+          This is a key on {view.chainName}, published for this challenge only. mUSD is a test token with no value, and gas is
+          paid in the chain&apos;s test coin. Do not send real funds to this address.
         </p>
         <dl className="flex flex-col gap-2 text-sm">
           <div>

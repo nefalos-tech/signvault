@@ -60,7 +60,9 @@ export function HeistLive({ initial }: { initial: HeistView }) {
           <Counter label="mUSD that left to an address not on the list" value={musd(view.outsiderWei)} tone={view.outsiderWei === '0' ? 'neutral' : 'red'} />
         </div>
         <p className="text-sm text-neutral-500">
-          Read from {view.chainName}, blocks {BigInt(view.fromBlock) + 1n} to {view.scannedTo}
+          {view.scannedTo === view.fromBlock
+            ? <>Read from {view.chainName}: no blocks yet after block {view.fromBlock}</>
+            : <>Read from {view.chainName}, blocks {BigInt(view.fromBlock) + 1n} to {view.scannedTo}</>}
           {behind > 0n && <> (catching up: {behind.toString()} newer blocks still to read)</>}. A refused transaction is one sent to
           the vault whose receipt says it reverted. mUSD out is every MockUSD transfer from the vault, checked against the payee
           list at that moment.
