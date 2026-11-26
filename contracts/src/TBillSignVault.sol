@@ -35,7 +35,7 @@ contract TBillSignVault is SignVault {
         }
     }
 
-    function sweep(uint256 assets) external {
+    function sweep(uint256 assets) external virtual {
         if (msg.sender != agent) revert OnlyAgent();
         uint256 available = cash.balanceOf(address(this));
         uint256 owed = owedThisPeriod();
