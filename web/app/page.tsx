@@ -2,10 +2,10 @@
 
 import { useState } from 'react';
 import type { AppState, Email } from '@signvault/shared';
-import { Icon } from '@/components/icons';
-import { FakeEmailPanel, InboxPanel, PendingChangesPanel } from '@/components/Panels';
+import { GateColumn } from '@/components/GateColumn';
+import { FakeEmailForm, InboxPanel, PendingChangesPanel } from '@/components/Panels';
 import { TreasuryPanel } from '@/components/TreasuryPanel';
-import { WalletColumn, clock } from '@/components/WalletColumn';
+import { Icon, buttonClass, clock } from '@/components/ui';
 import { chainName } from '@/lib/approve';
 import { MOCK, postJson, startRun, useAppState, useRunEvents } from '@/lib/hooks';
 import { mockState } from '@/lib/mock-state';
@@ -14,6 +14,10 @@ import { isTreasuryEvent, treasuryView } from '@/lib/treasury';
 
 /** The model is not in AppState or in any event, so it shows only when the person running the demo names it. */
 const MODEL = process.env.NEXT_PUBLIC_LLM_MODEL;
+
+/** The board's short names for our two chains. viem's name for 97 is "BNB Smart Chain Testnet". */
+const CHAIN_LABEL: Partial<Record<number, string>> = { 97: 'BSC testnet', 31337: 'Anvil' };
+const chainLabel = (chainId: number) => CHAIN_LABEL[chainId] ?? chainName(chainId);
 
 export default function Dashboard() {
   const run = useRunEvents();
@@ -24,10 +28,16 @@ export default function Dashboard() {
     ? mockState(run.events)
     : live.kind === 'ready' ? live.value : live.kind === 'error' ? live.last : undefined;
   const explorerUrl = state?.explorerUrl;
-  // The treasury run is SignVault's too, but it is not the payroll story the two columns compare.
+  // The treasury run is SignVault's too, but it is not the payroll story the two cards compare.
   const payroll = run.events.filter((e) => !isTreasuryEvent(e));
   const treasury = treasuryView(run.events, state);
   const startedAt = runStartedAt(payroll);
+  const baseline = baselineStory(payroll, state);
+  const vault = vaultStory(payroll, state);
+  const gateOpened = baseline.flow.nodes.some((n) => n.tone === 'breach');
+  const meta = startedAt !== undefined
+    ? `Run started ${clock(startedAt)}${MODEL ? `, model ${MODEL}` : ''}`
+    : MODEL && `Model ${MODEL}`;
 
   async function act(fn: () => Promise<unknown>) {
     setActionError(null);
@@ -47,96 +57,73 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line bg-white">
-        <div className="mx-auto flex max-w-[1392px] flex-wrap items-center justify-between gap-3 px-4 py-3.5 sm:px-6">
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="flex size-8 items-center justify-center rounded-lg bg-ink text-white">
-              <Icon name="shield" size={18} strokeWidth={2} />
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex max-w-[1392px] flex-wrap items-center justify-between gap-4 px-4 py-3 min-[560px]:px-6">
+          <div className="flex flex-wrap items-center gap-3.5">
+            <span className="flex items-center gap-2.5">
+              <Icon name="logo" size={34} />
+              <span className="font-display text-[21px] font-bold tracking-[-0.02em]">SignVault</span>
             </span>
-            <span className="text-base font-semibold">SignVault</span>
-            <span className="hidden h-5 w-px bg-line sm:block" />
-            <span className="text-sm text-muted">Agent wallet security · live comparison</span>
+            <span className="hidden h-5 w-px bg-border min-[560px]:block" />
+            <span className="text-sm text-muted-foreground">Agent wallet security</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {state && (
-              <span className="flex items-center gap-1.5 rounded-full border border-line px-2.5 py-1 text-[13px] font-medium text-ink-2">
-                <span className="block size-2 rounded-full bg-good-500" />
-                {chainName(state.chainId)} · chain {state.chainId}
-              </span>
-            )}
-            {MOCK ? (
-              <span className="rounded-full border border-wait-200 bg-wait-50 px-2.5 py-1 text-[13px] font-medium text-wait-700">Recorded run</span>
-            ) : (
-              <ServerStatus stateError={live.kind === 'error' ? live.message : null} />
-            )}
-            <button type="button" onClick={reset} className="min-h-10 rounded-lg border border-line-2 bg-white px-3.5 text-sm font-semibold text-ink-2 hover:bg-canvas active:bg-chip">
-              Reset
-            </button>
-            <button type="button" onClick={runTask} className="min-h-10 rounded-lg border border-ink bg-ink px-4 text-sm font-semibold text-white active:bg-ink-2">
-              Run the task
-            </button>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <StatusChip
+              status={MOCK ? 'recorded' : live.kind === 'error' ? 'down' : 'live'}
+              detail={live.kind === 'error' ? live.message : undefined}
+              chain={state && `${chainLabel(state.chainId)}, chain ${state.chainId}`}
+            />
+            <button type="button" onClick={reset} className={buttonClass('outline')}>Reset</button>
+            <button type="button" onClick={runTask} className={buttonClass()}>Run the task</button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-[1392px] flex-col gap-5 px-4 py-6 sm:px-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="text-xl font-semibold tracking-[-0.01em] sm:text-2xl">Same agent, same task: pay the three invoices in the inbox</h1>
-          {(MODEL || startedAt !== undefined) && (
-            <span className="text-sm text-faint">
-              {[MODEL && `Model ${MODEL}`, startedAt !== undefined && `run started ${clock(startedAt)}`].filter(Boolean).join(' · ')}
-            </span>
-          )}
+      <main className="mx-auto flex max-w-[1392px] flex-col gap-6 px-4 pt-8 pb-10 min-[560px]:px-6">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div className="flex max-w-[700px] flex-col gap-1.5">
+            <h1 className="font-display text-[30px] leading-[1.08] font-[650] tracking-[-0.025em] text-balance min-[560px]:text-[38px]">
+              {gateOpened ? 'One gate let the agent through' : 'Same agent, same task: pay the three invoices in the inbox'}
+            </h1>
+            <p className="text-[17px] leading-normal text-pretty text-secondary-foreground">
+              Each wallet puts one gate between the agent and more spending. The standard wallet&apos;s gate opens for anyone
+              who can read the inbox. SignVault&apos;s opens only for the owner&apos;s key.
+            </p>
+          </div>
+          {meta && <span className="text-sm text-muted-foreground">{meta}</span>}
         </div>
-        {actionError && <p className="rounded-lg border border-bad-200 bg-bad-50 px-4 py-2 text-sm text-bad-700">{actionError}</p>}
+        {actionError && (
+          <p className="rounded-2xl border border-destructive-border bg-destructive-tint px-4 py-2 text-sm text-destructive-deep">{actionError}</p>
+        )}
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <WalletColumn
-            title="Standard wallet"
-            rule="Rule changes: confirm a code sent by email"
-            icon="wallet"
+        <div className="grid gap-5 min-[1040px]:grid-cols-2">
+          <GateColumn
+            wallet="baseline"
+            story={baseline}
+            events={payroll.filter((e) => e.wallet === 'baseline')}
             address={state?.addresses.baselineWallet}
             explorerUrl={explorerUrl}
-            story={baselineStory(payroll, state)}
-            events={payroll.filter((e) => e.wallet === 'baseline')}
           />
-          <WalletColumn
-            title="SignVault"
-            rule="Rule changes: the owner's signature, checked by the contract"
-            icon="shield"
+          <GateColumn
+            wallet="signvault"
+            story={vault}
+            events={payroll.filter((e) => e.wallet === 'signvault')}
             address={state?.addresses.signVault}
             explorerUrl={explorerUrl}
-            story={vaultStory(payroll, state)}
-            events={payroll.filter((e) => e.wallet === 'signvault')}
-            footer={treasury && (
-              <TreasuryPanel
-                view={treasury}
-                events={run.events.filter(isTreasuryEvent)}
-                explorerUrl={explorerUrl}
-                disabled={MOCK}
-                onRun={() => act(() => postJson('/api/runs', { wallet: 'signvault', task: 'treasury' }))}
-                onShock={(on) => act(() => postJson('/api/admin/price-shock', { on }))}
-              />
-            )}
-          >
-            {!MOCK && (
-              <button
-                type="button"
-                onClick={() => act(() => startRun('signvault'))}
-                className="min-h-10 self-start rounded-lg border border-line-2 bg-white px-3.5 text-sm font-semibold text-ink-2 hover:bg-canvas active:bg-chip"
-              >
+            action={!MOCK && (
+              <button type="button" onClick={() => act(() => startRun('signvault'))} className={buttonClass('outline', 'sm')}>
                 Run again on SignVault
               </button>
             )}
-          </WalletColumn>
+          />
         </div>
 
-        <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+        <div className="grid items-stretch gap-5 min-[1040px]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
           <PendingChangesPanel state={state} />
           <InboxPanel
             inbox={state?.inbox ?? []}
             form={
-              <FakeEmailPanel
+              <FakeEmailForm
                 disabled={MOCK}
                 onSend={async (email) => {
                   await postJson<Email>('/api/inbox', email);
@@ -146,19 +133,39 @@ export default function Dashboard() {
             }
           />
         </div>
+
+        {treasury && (
+          <TreasuryPanel
+            view={treasury}
+            events={run.events.filter(isTreasuryEvent)}
+            explorerUrl={explorerUrl}
+            disabled={MOCK}
+            onRun={() => act(() => postJson('/api/runs', { wallet: 'signvault', task: 'treasury' }))}
+            onShock={(on) => act(() => postJson('/api/admin/price-shock', { on }))}
+          />
+        )}
       </main>
     </div>
   );
 }
 
-function ServerStatus({ stateError }: { stateError: string | null }) {
-  const ok = !stateError;
+const STATUS = {
+  live: { text: 'Live', dot: 'bg-success' },
+  down: { text: 'Server not reachable', dot: 'bg-destructive' },
+  recorded: { text: 'Recorded run', dot: 'bg-pending' },
+};
+
+function StatusChip({ status, detail, chain }: { status: keyof typeof STATUS; detail?: string; chain: string | undefined }) {
   return (
     <span
-      title={stateError ?? undefined}
-      className={`rounded-full border px-2.5 py-1 text-[13px] font-medium ${ok ? 'border-good-200 bg-good-50 text-good-700' : 'border-bad-200 bg-bad-50 text-bad-700'}`}
+      title={detail}
+      className="inline-flex min-h-8 flex-wrap items-center gap-x-2 gap-y-0.5 rounded-2xl border border-border px-3 py-1 text-sm font-medium whitespace-nowrap text-secondary-foreground min-[560px]:rounded-full"
     >
-      {ok ? 'Live' : 'Server not reachable'}
+      <span className="inline-flex items-center gap-2">
+        <span className={`block size-2 rounded-full ${STATUS[status].dot}`} />
+        {STATUS[status].text}
+      </span>
+      {chain && <span className="font-normal text-subtle-foreground">{chain}</span>}
     </span>
   );
 }

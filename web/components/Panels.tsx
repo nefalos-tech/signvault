@@ -5,17 +5,14 @@ import type { FormEvent, ReactNode } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { AppState, Email, PendingChange } from '@signvault/shared';
 import { describeChange } from '@/lib/approve';
-import { txUrl } from '@/lib/format';
-import { SectionLabel } from './WalletColumn';
+import { Card, CardDescription, ClockGlyph, PanelHead, TxLink, buttonClass, linkButtonClass } from './ui';
 
-function Card({ className = '', children }: { className?: string; children: ReactNode }) {
-  return <section className={`min-w-0 rounded-xl border border-line bg-white px-4 py-5 shadow-xs sm:px-6 ${className}`}>{children}</section>;
-}
+const PANEL = 'gap-[18px] p-5 min-[560px]:px-7 min-[560px]:py-6';
 
-const STATUS: Record<PendingChange['status'], { text: string; pill: string }> = {
-  pending: { text: 'Awaiting signature', pill: 'border-wait-200 bg-wait-50 text-wait-700' },
-  applied: { text: 'Approved by the owner', pill: 'border-good-200 bg-good-50 text-good-700' },
-  failed: { text: 'Failed', pill: 'border-bad-200 bg-bad-50 text-bad-700' },
+const STATUS: Record<PendingChange['status'], { text: string; row: string; pill: string }> = {
+  pending: { text: 'Awaiting signature', row: 'border-dashed border-pending', pill: 'bg-primary-soft text-primary-text' },
+  applied: { text: 'Approved by the owner', row: 'border-primary-border', pill: 'bg-primary text-primary-foreground' },
+  failed: { text: 'Failed', row: 'border-destructive-border', pill: 'bg-destructive-soft text-destructive-text' },
 };
 
 export function PendingChangesPanel({ state }: { state: AppState | undefined }) {
@@ -25,41 +22,48 @@ export function PendingChangesPanel({ state }: { state: AppState | undefined }) 
   const changes: PendingChange[] = state?.pendingChanges ?? [];
 
   return (
-    <Card className="flex flex-wrap items-center justify-between gap-5">
-      <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-2.5">
-        <SectionLabel>Pending changes</SectionLabel>
-        {changes.length === 0 && <p className="text-sm text-faint">Nothing waiting for the owner.</p>}
+    <Card className={PANEL} aria-labelledby="pending-title">
+      <PanelHead
+        icon="lock-shield"
+        id="pending-title"
+        title="Pending changes"
+        description="The agent can request a change. Only a signature from the owner's phone can apply it."
+      />
+      {changes.length === 0 && <p className="text-sm text-subtle-foreground">Nothing waiting for the owner.</p>}
+      {changes.length > 0 && (
         <ul className="flex flex-col gap-2">
           {changes.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 rounded-[10px] border border-line px-3.5 py-3">
+            <li key={c.id} className={`flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-[14px] border px-3.5 py-3 ${STATUS[c.status].row}`}>
               <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-sm font-semibold">{describeChange(c, state?.vendors ?? [])}</span>
-                <span className="text-xs text-faint">
-                  Requested by the agent · nonce <span className="font-mono">{c.nonce}</span>
-                  {c.txHash && state?.explorerUrl && (
+                <span className="text-[15px] font-semibold">{describeChange(c, state?.vendors ?? [])}</span>
+                <span className="text-[13px] text-muted-foreground">
+                  Requested by the agent, nonce <span className="font-mono">{c.nonce}</span>
+                  {c.txHash && (
                     <>
-                      {' · '}
-                      <a className="text-link hover:underline" href={txUrl(state.explorerUrl, c.txHash)} target="_blank" rel="noreferrer">view tx</a>
+                      {', '}
+                      <TxLink txHash={c.txHash} explorerUrl={state?.explorerUrl} text="view transaction" />
                     </>
                   )}
-                  {c.status === 'failed' && <span className="text-bad-700"> · {c.error ?? 'unknown error'}</span>}
+                  {c.status === 'failed' && <span className="text-destructive-text">, {c.error ?? 'unknown error'}</span>}
                 </span>
               </span>
-              <span className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold whitespace-nowrap ${STATUS[c.status].pill}`}>
+              <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] font-semibold whitespace-nowrap ${STATUS[c.status].pill}`}>
+                {c.status === 'pending' && <ClockGlyph />}
                 {STATUS[c.status].text}
               </span>
             </li>
           ))}
         </ul>
-        <p className="text-[13px] text-muted">The agent can request a change. Only a signature from the owner&apos;s phone can apply it.</p>
-      </div>
+      )}
       {approveUrl && (
-        <div className="flex items-center gap-3.5">
-          <QRCodeSVG value={approveUrl} size={96} marginSize={1} className="flex-none rounded-[10px] border border-line" />
-          <div className="flex max-w-48 flex-col gap-1">
-            <span className="text-sm font-semibold">Approve on your phone</span>
-            <span className="text-[13px] text-faint">Scan to open the approval page.</span>
-            <span className="font-mono text-xs break-all text-faint">{approveUrl}</span>
+        <div className="mt-auto flex flex-wrap items-center gap-[18px] rounded-[18px] border border-border bg-muted p-3.5 min-[560px]:flex-nowrap">
+          <span role="img" aria-label="QR code that opens the approval page" className="flex size-[120px] flex-none rounded-xl border border-border bg-white p-1.5">
+            <QRCodeSVG value={approveUrl} size={106} marginSize={1} fgColor="#0e0f2c" />
+          </span>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="font-display text-base font-[650]">Approve on your phone</span>
+            <CardDescription>Scan to open the approval page. The owner signs there, and the contract checks the signature.</CardDescription>
+            <span className="text-[13px] break-all text-subtle-foreground">{approveUrl}</span>
           </div>
         </div>
       )}
@@ -69,36 +73,54 @@ export function PendingChangesPanel({ state }: { state: AppState | undefined }) 
 
 /** Who sent it, in a few words, and whether a code is inside. */
 function sender(e: Email) {
-  if (e.from === 'no-reply@standardwallet.test') return { text: 'Wallet provider · code inside', tone: 'text-bad-700' };
-  if (e.from === 'no-reply@signvault.test') return { text: 'SignVault · no code', tone: 'text-faint' };
-  return { text: e.from, tone: 'text-faint' };
+  if (e.from === 'no-reply@standardwallet.test') return { text: 'Wallet provider, code inside', risk: true };
+  if (e.from === 'no-reply@signvault.test') return { text: 'SignVault, no code', risk: false };
+  return { text: e.from, risk: false };
 }
 
+const SHOWN = 3;
+
 export function InboxPanel({ inbox, form }: { inbox: Email[]; form: ReactNode }) {
+  const [showAll, setShowAll] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const newest = [...inbox].reverse();
+  const earlier = newest.length - SHOWN;
+  const to = inbox.find((e) => e.to)?.to;
+
   return (
-    <Card className="flex flex-col gap-2.5">
-      <SectionLabel>Shared inbox</SectionLabel>
-      {inbox.length === 0 && <p className="text-sm text-faint">Empty.</p>}
-      <ul className="flex max-h-80 flex-col overflow-y-auto">
-        {[...inbox].reverse().map((e) => {
+    <Card className={PANEL} aria-labelledby="inbox-title">
+      <PanelHead icon="gmail" id="inbox-title" title="Shared inbox" description={to ? `${to}, which the agent reads` : 'The inbox the agent reads'} />
+      {inbox.length === 0 && <p className="text-sm text-subtle-foreground">Empty.</p>}
+      <ul className="flex flex-col">
+        {(showAll ? newest : newest.slice(0, SHOWN)).map((e) => {
           const from = sender(e);
           return (
-            <li key={e.id} className="flex flex-col gap-0.5 border-b border-chip py-2.5 last:border-b-0">
-              <span className="flex flex-wrap justify-between gap-x-3">
-                <span className="text-sm font-medium">{e.subject}</span>
-                <span className={`text-xs ${from.tone}`}>{from.text}</span>
+            <li key={e.id} className="flex flex-col gap-0.5 border-b border-border py-2.5 last:border-b-0">
+              <span className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
+                <span className="text-sm font-semibold">{e.subject}</span>
+                <span className={`text-[13px] ${from.risk ? 'font-semibold text-destructive-text' : 'text-subtle-foreground'}`}>{from.text}</span>
               </span>
-              <span className="line-clamp-2 text-xs break-words text-muted">{e.body}</span>
+              <span className="line-clamp-1 text-[13px] leading-[1.45] break-words text-muted-foreground">{e.body}</span>
             </li>
           );
         })}
       </ul>
-      {form}
+      <div className="mt-auto flex flex-wrap items-center justify-between gap-3">
+        {earlier > 0 ? (
+          <button type="button" className={linkButtonClass} aria-expanded={showAll} onClick={() => setShowAll((v) => !v)}>
+            {showAll ? 'Show only the newest 3' : `Show ${earlier} earlier email${earlier === 1 ? '' : 's'}`}
+          </button>
+        ) : <span />}
+        <button type="button" className={buttonClass('outline', 'sm')} aria-expanded={formOpen} aria-controls="fake-email" onClick={() => setFormOpen((v) => !v)}>
+          Send a fake email
+        </button>
+      </div>
+      <div id="fake-email" hidden={!formOpen}>{form}</div>
     </Card>
   );
 }
 
-export function FakeEmailPanel({ disabled, onSend }: { disabled: boolean; onSend: (e: { from: string; subject: string; body: string }) => Promise<void> }) {
+export function FakeEmailForm({ disabled, onSend }: { disabled: boolean; onSend: (e: { from: string; subject: string; body: string }) => Promise<void> }) {
   const [from, setFrom] = useState('no-reply@standardwallet.test');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -117,27 +139,18 @@ export function FakeEmailPanel({ disabled, onSend }: { disabled: boolean; onSend
     }
   }
 
-  const input = 'w-full rounded-lg border border-line-2 bg-white px-3 py-2 text-sm disabled:bg-chip';
+  const input = 'w-full rounded-xl border border-input bg-card px-3 py-2 text-sm disabled:bg-muted disabled:text-subtle-foreground';
   return (
-    <details className="group">
-      <summary className="inline-flex min-h-9 cursor-pointer list-none items-center rounded-lg border border-line-2 bg-white px-3 text-[13px] font-semibold text-ink-2 hover:bg-canvas [&::-webkit-details-marker]:hidden">
-        Send a fake email
-      </summary>
-      <form onSubmit={submit} className="mt-3 flex flex-col gap-2">
-        <input className={input} aria-label="From" value={from} onChange={(e) => setFrom(e.target.value)} required disabled={disabled} />
-        <input className={input} aria-label="Subject" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} required disabled={disabled} />
-        <textarea className={input} aria-label="Body" placeholder="Body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} required disabled={disabled} />
-        <button
-          type="submit"
-          disabled={disabled || status.kind === 'sending'}
-          className="h-10 rounded-lg bg-ink text-sm font-semibold text-white disabled:opacity-50"
-        >
-          {status.kind === 'sending' ? 'Sending…' : 'Send to the inbox'}
-        </button>
-        {disabled && <p className="text-xs text-faint">Needs the live server. Off in recorded mode.</p>}
-        {status.kind === 'sent' && <p className="text-xs text-good-700">Delivered.</p>}
-        {status.kind === 'error' && <p className="text-xs text-bad-700">{status.message}</p>}
-      </form>
-    </details>
+    <form onSubmit={submit} className="flex flex-col gap-2">
+      <input className={input} aria-label="From" value={from} onChange={(e) => setFrom(e.target.value)} required disabled={disabled} />
+      <input className={input} aria-label="Subject" placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} required disabled={disabled} />
+      <textarea className={input} aria-label="Body" placeholder="Body" rows={3} value={body} onChange={(e) => setBody(e.target.value)} required disabled={disabled} />
+      <button type="submit" disabled={disabled || status.kind === 'sending'} className={buttonClass('default', 'sm')}>
+        {status.kind === 'sending' ? 'Sending…' : 'Send to the inbox'}
+      </button>
+      {disabled && <p className="text-[13px] text-subtle-foreground">Needs the live server. Off in recorded mode.</p>}
+      {status.kind === 'sent' && <p className="text-[13px] text-primary-text">Delivered.</p>}
+      {status.kind === 'error' && <p className="text-[13px] text-destructive-text">{status.message}</p>}
+    </form>
   );
 }

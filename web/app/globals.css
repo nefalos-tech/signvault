@@ -1,34 +1,59 @@
 @import "tailwindcss";
 
-/* Direction D: neutral greys, one red for the agent's breach, one green for the contract's check. */
+/* The D2 "gate flow" board: violet for SignVault and the owner's key, red where the agent got through. */
 @theme {
-  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --color-ink: #101828;
-  --color-ink-2: #344054;
-  --color-muted: #475467;
-  --color-faint: #667085;
-  --color-line: #eaecf0;
-  --color-line-2: #d0d5dd;
-  --color-canvas: #f9fafb;
-  --color-chip: #f2f4f7;
-  --color-link: #155eef;
-  --color-bad-50: #fef3f2;
-  --color-bad-200: #fecdca;
-  --color-bad-600: #d92d20;
-  --color-bad-700: #b42318;
-  --color-bad-800: #912018;
-  --color-good-50: #ecfdf3;
-  --color-good-200: #abefc6;
-  --color-good-500: #17b26a;
-  --color-good-700: #067647;
-  --color-good-800: #085d3a;
-  --color-wait-50: #fffaeb;
-  --color-wait-200: #fedf89;
-  --color-wait-700: #b54708;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --color-background: #f4f4fb;
+  --color-foreground: #0e0f2c;
+  --color-card: #ffffff;
+  --color-muted: #fafafe;
+  --color-muted-foreground: #5b5d7a;
+  --color-secondary-foreground: #4b4d6b;
+  --color-subtle-foreground: #666890;
+  --color-border: #e6e6f2;
+  --color-input: #d8d8e8;
+  --color-line: #c9c9dc;
+  --color-dot: #dcdcec;
+  --color-primary: #5b4bff;
+  --color-primary-foreground: #ffffff;
+  --color-primary-hover: #4c3cf0;
+  --color-primary-text: #4335e0;
+  --color-primary-deep: #2a1fb0;
+  --color-primary-ink: #3a2f99;
+  --color-primary-tint: #f5f4ff;
+  --color-primary-soft: #efedff;
+  --color-primary-border: #d9d5ff;
+  --color-pending: #8a7fff;
+  --color-destructive: #e5484d;
+  --color-destructive-text: #ce2c31;
+  --color-destructive-deep: #a6191d;
+  --color-destructive-ink: #7d1a1d;
+  --color-destructive-tint: #fff5f5;
+  --color-destructive-soft: #fff0f0;
+  --color-destructive-border: #ffd1d2;
+  --color-success: #12a594;
+  --color-ring: #4335e0;
+  --radius-card: 24px;
+}
+
+/* next/font sets these two on <html>, so read them where they are used. */
+@theme inline {
+  --font-sans: var(--font-instrument), system-ui, sans-serif;
+  --font-display: var(--font-bricolage), system-ui, sans-serif;
 }
 
 body {
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }
