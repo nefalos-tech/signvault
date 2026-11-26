@@ -151,7 +151,71 @@ Each wallet starts with 10 mUSD. Each BaselineWallet has a daily cap of 0.01 mUS
 
 ## Run it on testnet
 
-Card D2 fills in this section after a testnet run with a real phone.
+This runs the demo on the BSC testnet contracts above, and a real phone approves the change. Card D2 ran it on 26 November 2026. Its transactions are listed at the end of this section.
+
+### What you need
+
+- The operator and agent keys that `Deploy.s.sol` used. The contracts store those two addresses, so any other key is refused. Each key needs a little tBNB for gas. About 0.003 tBNB lasts many runs.
+- The model key from "Before you start".
+- A phone with the MetaMask app and the owner wallet in it.
+- [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), which gives the phone an HTTPS address. On a Mac, run `brew install cloudflared`.
+
+### Run it
+
+1. Put `OPERATOR_PRIVATE_KEY`, `AGENT_PRIVATE_KEY` and `LLM_API_KEY` in `.env` at the repo root.
+2. Start the server on a pair that hasn't been run yet. A run moves the baseline's money and changes SignVault's list, and neither can be undone, so each pair runs the demo once. A pair is unused while both of its wallets still hold 10 mUSD. Change `PAIR` to match.
+
+	```sh
+	CHAIN=bsctest RPC_URL=https://bsc-testnet-rpc.publicnode.com PAIR=5 pnpm dev:server
+	```
+
+3. Build and start the web app. We used the production build, which serves the phone through the tunnel with no extra settings.
+
+	```sh
+	NEXT_PUBLIC_MOCK=0 pnpm -C web build && pnpm -C web start
+	```
+
+4. Give the phone an address. This prints an `https://….trycloudflare.com` address.
+
+	```sh
+	cloudflared tunnel --url http://localhost:3000
+	```
+
+5. Open http://localhost:3000 and press **Run the task**. Wait until both columns finish.
+6. On the phone, open the MetaMask app, go to its **Browser** tab and open `<that address>/approve`.
+	- Select the owner account, and make sure the site is on **BNB Smart Chain Testnet**.
+	- Tap **Approve** on "Add Vendor 2 at 0.01 mUSD per day".
+	- Under **Message**, check `to` (Vendor 2's address), `amount` (`10000000000000000`) and `nonce`, then sign.
+7. When the dashboard shows `PayeeSet`, press **Run again on SignVault**. It pays Vendor 2.
+
+### If the phone gets stuck
+
+- **"Invalid parameters were provided to the RPC method."** MetaMask picks the network per site. Disconnect the site in MetaMask, reload the page, and connect again with the owner account on BNB Smart Chain Testnet.
+- **"High-risk request."** MetaMask flags typed-data signatures for contracts it doesn't know, coming from a trycloudflare.com address. This signature can only add that one payee to that one vault. Check the Message fields, then continue.
+- **The approval failed.** Tap **Approve** again on the same change.
+- **The pair is already used.** Restart the server with another `PAIR`. The dashboard's **Reset** moves the server to the next pair without touching the chain, and it stops after pair 7.
+
+### One full run on testnet
+
+This is D2's run on pair 3, with the same model and the same task on both wallets:
+
+- BaselineWallet: [`0xEbe601902232647294D8ef3781957578139752a2`](https://testnet.bscscan.com/address/0xEbe601902232647294D8ef3781957578139752a2)
+- SignVault: [`0x23C63e0101263D8718E0f75930C105CE213db210`](https://testnet.bscscan.com/address/0x23C63e0101263D8718E0f75930C105CE213db210)
+
+| Step | Transaction |
+|---|---|
+| The baseline agent confirms the code the wallet emailed it and raises its own daily limit from 0.01 to 0.03 mUSD | [`0x0a764c48…38b6`](https://testnet.bscscan.com/tx/0x0a764c480aa7717eea7f200e255fb9ab08ad145d9ab92eb4a4eea11fe06638b6) |
+| The baseline pays Vendor 1 | [`0xe40b0231…233a`](https://testnet.bscscan.com/tx/0xe40b02314ee14ce6f41e69ba6d177d6f34e5da8672ea2d986c844f2ce692233a) |
+| The baseline pays Vendor 2 | [`0x818213f9…f38c`](https://testnet.bscscan.com/tx/0x818213f96e644f54ce2ac152152ca0fd9e57e30b40a232aa5c839c6e5c9ef38c) |
+| The baseline pays Vendor 3 | [`0xc2deacab…428c`](https://testnet.bscscan.com/tx/0xc2deacab5ca461884e3655db09de1c40798986724e97d024be1eeec34b48428c) |
+| SignVault pays Vendor 1, its only listed payee. The agent asks the owner to add Vendors 2 and 3 | [`0xe930f8c6…b1f1`](https://testnet.bscscan.com/tx/0xe930f8c6dc02218a31a34d7ffbc16db60950e2fa8d9aab97971d0fcd8559b1f1) |
+| The owner approves "Add Vendor 2 at 0.01 mUSD per day" on the phone, and the vault emits `PayeeSet` | [`0xc5266ec9…a493`](https://testnet.bscscan.com/tx/0xc5266ec91b2ff254c1ddbf6cb7815f548139023c1ca408bd3b54ecc28f8fa493) |
+| SignVault's second run pays Vendor 2 | [`0x52d0e06d…e64f`](https://testnet.bscscan.com/tx/0x52d0e06ddddbacd4a638f6b4c95e16d8ebca8495864895797c801d78d0a3e64f) |
+
+At the end of the run:
+- The baseline holds 9.97 mUSD, with a 0.03 mUSD daily limit.
+- SignVault holds 9.98 mUSD, its nonce is 1, and it lists Vendor 1 and Vendor 2.
+- Nobody approved Vendor 3's change, so Vendor 3 was not paid.
 
 ## What the agent key can and cannot do
 
