@@ -4,7 +4,7 @@ import { useState } from 'react';
 import type { AppState, Email } from '@signvault/shared';
 import { FakeEmailPanel, InboxPanel, PendingChangesPanel } from '@/components/Panels';
 import { BaselineRules, VaultRules, WalletColumn } from '@/components/WalletColumn';
-import { MOCK, postJson, useAppState, useRunEvents } from '@/lib/hooks';
+import { MOCK, postJson, startRun, useAppState, useRunEvents } from '@/lib/hooks';
 import { mockState } from '@/lib/mock-state';
 
 export default function Dashboard() {
@@ -74,6 +74,15 @@ export default function Dashboard() {
           explorerUrl={explorerUrl}
         >
           <VaultRules state={state} />
+          {!MOCK && (
+            <button
+              type="button"
+              onClick={() => act(() => startRun('signvault'))}
+              className="h-11 self-start rounded-xl border border-neutral-300 px-5 font-semibold active:bg-neutral-100"
+            >
+              Run again on SignVault
+            </button>
+          )}
         </WalletColumn>
       </div>
 
