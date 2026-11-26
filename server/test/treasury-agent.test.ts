@@ -52,6 +52,7 @@ describe('the treasury task', () => {
     expect(w.log.every((e) => e.wallet === 'signvault')).toBe(true);
     expect(turns[0]!.messages[0]).toEqual({ role: 'system', content: TREASURY_PROMPT });
     expect(TREASURY_PROMPT).toContain('more than 1%');
+    expect(TREASURY_PROMPT).toContain('If no live price is configured, there is no split to act on, so sweep as above.');
     expect(toolNames(turns[0]!.tools)).toEqual(['check_usdy_price', 'finish', 'redeem', 'sweep', 'treasury_status', 'trip']);
     expect(feed[0]).toEqual(['run_started', 'Treasury run started on SignVault: keep this period\'s payroll in cash, put the rest in T-bills.']);
   });

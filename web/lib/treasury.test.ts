@@ -42,6 +42,12 @@ describe('treasuryView', () => {
     expect(treasuryView([], state())).toMatchObject({ cash: '0.01', inTbills: '9.99', owed: '0.01', tripwire: undefined, status: 'idle' });
   });
 
+  it('rounds to 4 decimals, so ERC4626 rounding does not show as 9.989999999999999999', () => {
+    const s = state();
+    s.signvault.tbillValue = '9989999999999999999';
+    expect(treasuryView([], s)!.inTbills).toBe('9.99');
+  });
+
   it('with no live price it says so, and claims no split', () => {
     expect(treasuryView([], state({ tripped: false, usdyPrice: null, redemptionValue: NAV, simulated: false }))!.tripwire).toEqual({
       tripped: false, price: null, redemptionValue: '1', splitPercent: null, source: 'none', overThreshold: false,

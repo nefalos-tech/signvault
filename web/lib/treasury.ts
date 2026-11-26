@@ -86,4 +86,9 @@ function runStatus(events: RunEvent[]): RunStatus {
   return events.some((e) => e.kind === 'run_finished' && e.runId === last.runId) ? 'finished' : 'running';
 }
 
-const decimal = (wei: string | bigint) => formatUnits(BigInt(wei), MUSD_DECIMALS);
+/** mUSD to 4 decimals, rounded half up, for display only: the split is worked out from the exact wei. */
+const SHOWN = 4;
+const decimal = (wei: string | bigint) => {
+  const step = 10n ** BigInt(MUSD_DECIMALS - SHOWN);
+  return formatUnits((BigInt(wei) + step / 2n) / step, SHOWN);
+};

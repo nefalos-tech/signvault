@@ -14,6 +14,7 @@ export const TREASURY_PROMPT =
   + 'If cash is below the payroll still owed, redeem enough T-bills to cover it. '
   + `Before you sweep, check USDY's market price against its redemption value. If they are more than ${TRIP_PERCENT}% apart, `
   + 'trip the wire, which moves everything back to cash and locks sweeping until the owner re-arms it, and do not sweep. '
+  + 'If no live price is configured, there is no split to act on, so sweep as above. '
   + 'When you have done all you can, call finish with a short summary.';
 
 type Vault = AppState['signvault'];
