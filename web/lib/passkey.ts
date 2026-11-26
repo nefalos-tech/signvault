@@ -32,10 +32,12 @@ const APPROVAL_PARAMS = [
 
 /**
  * Creates an ES256 passkey that needs Face ID, Touch ID or a PIN. It belongs to `rpId`, the site's hostname,
- * and works only there. Every passkey from this page has the same user handle, so a new one replaces the last.
+ * and works only there. Each one gets its own random user handle, so a new passkey never overwrites one a
+ * deployed vault still holds.
  */
 export async function registerPasskey(rpId: string, createFn?: CreateFn): Promise<Passkey> {
-  const credential = await createWebAuthnCredential({ name: 'SignVault owner', rp: { id: rpId, name: 'SignVault' }, createFn });
+  const user = { id: crypto.getRandomValues(new Uint8Array(32)), name: 'SignVault owner', displayName: 'SignVault owner' };
+  const credential = await createWebAuthnCredential({ name: user.name, user, rp: { id: rpId, name: 'SignVault' }, createFn });
   return { id: credential.id, x: slice(credential.publicKey, 0, 32), y: slice(credential.publicKey, 32, 64) };
 }
 

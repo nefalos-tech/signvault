@@ -130,9 +130,14 @@ export default function ApprovePasskeyPage() {
           disabled={registering.kind === 'busy'}
           className="h-12 w-full rounded-xl border border-neutral-900 text-base font-semibold active:bg-neutral-100 disabled:opacity-60"
         >
-          {registering.kind === 'busy' ? registering.label : passkey ? 'Replace the passkey' : 'Create a passkey'}
+          {registering.kind === 'busy' ? registering.label : passkey ? 'Create a new passkey' : 'Create a passkey'}
         </button>
-        {passkey && <p className="text-sm text-neutral-500">A vault deployed with the old key will refuse the new one.</p>}
+        {passkey && (
+          <p className="text-sm text-neutral-500">
+            The current passkey stays on this device, but this page will then sign with the new one. A vault deployed with
+            the current key accepts only that key or the owner&apos;s wallet.
+          </p>
+        )}
         {registering.kind === 'error' && <p className="text-red-700">{registering.message}</p>}
       </section>
       {load.kind === 'loading' && <p className="text-lg text-neutral-600">Loading the vault…</p>}

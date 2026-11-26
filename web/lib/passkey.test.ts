@@ -101,6 +101,11 @@ describe('registerPasskey', () => {
     expect(publicKey.pubKeyCredParams).toEqual([{ type: 'public-key', alg: -7 }]);
     expect(publicKey.authenticatorSelection.userVerification).toBe('required');
     expect(publicKey.rp.id).toBe(RP_ID);
+    // A shared user handle would let the platform overwrite the passkey a deployed vault holds.
+    await registerPasskey(RP_ID, authenticator.createFn);
+    const [first, second] = authenticator.requests.create.map((o) => bytesToHex(new Uint8Array(o.publicKey.user.id)));
+    expect(first).toHaveLength(2 + 2 * 32);
+    expect(first).not.toBe(second);
     const jwk = authenticator.publicKey.export({ format: 'jwk' });
     expect(passkey).toEqual({
       id: CREDENTIAL_ID,
@@ -127,6 +132,8 @@ describe('signChangeWithPasskey', () => {
     expect(bytesToHex(publicKey.challenge)).toBe(digest);
     expect(publicKey.userVerification).toBe('required');
     expect(publicKey.rpId).toBe(RP_ID);
+    expect(publicKey.allowCredentials).toHaveLength(1);
+    expect(Buffer.from(publicKey.allowCredentials[0].id).toString('base64url')).toBe(CREDENTIAL_ID);
     // Six flat parameters, so the first word is r and not a tuple offset.
     const [r] = decodeAbiParameters(APPROVAL_PARAMS, approval);
     expect(approval.slice(0, 66)).toBe(r);
