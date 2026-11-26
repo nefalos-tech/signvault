@@ -72,7 +72,7 @@ describe('treasuryView', () => {
       ev('treasury-bbbb', 'tx_sent', 'Swept 9.99 mUSD into T-bills.', { txHash: '0xbb' }),
       ev('treasury-bbbb', 'tool_result', 'The sweep went through.', { tool: 'sweep', txHash: '0xbb' }),
       ev('treasury-bbbb', 'run_finished', 'Finished: swept 9.99 mUSD.'),
-      ev('treasury-owner-cccc', 'tx_sent', 'The owner re-armed the tripwire from their phone. Sweeping is unlocked.', { txHash: '0xcc' }),
+      ev('treasury-owner-cccc', 'tx_sent', 'The owner signed the re-arm. Sweeping is unlocked.', { txHash: '0xcc' }),
     ];
     const view = treasuryView(events, state())!;
     expect(view.status).toBe('finished');
@@ -82,7 +82,7 @@ describe('treasuryView', () => {
       { kind: 'no', title: 'Refused: sweeping 10 mUSD would dip into the payroll still owed this period.', detail: 'SweepDipsIntoPayroll', txHash: '0xaa' },
       { kind: 'ok', title: 'Swept 9.99 mUSD into T-bills.', detail: undefined, txHash: '0xbb' },
       { kind: 'info', title: 'Treasury run finished', detail: undefined, txHash: undefined },
-      { kind: 'ok', title: 'The owner re-armed the tripwire from their phone. Sweeping is unlocked.', detail: undefined, txHash: '0xcc' },
+      { kind: 'ok', title: 'The owner signed the re-arm. Sweeping is unlocked.', detail: undefined, txHash: '0xcc' },
     ]);
   });
 });

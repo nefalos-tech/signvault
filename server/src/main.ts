@@ -131,7 +131,7 @@ export async function compose({ chain, llm, prices = new PriceFeed() }: { chain:
         runId: `treasury-owner-${randomUUID().slice(0, 8)}`,
         wallet: 'signvault',
         ...(result.ok
-          ? { kind: 'tx_sent', text: 'The owner re-armed the tripwire from their phone. Sweeping is unlocked.', txHash: result.txHash }
+          ? { kind: 'tx_sent', text: 'The owner signed the re-arm. Sweeping is unlocked.', txHash: result.txHash }
           : { kind: 'tx_refused', text: `Re-arm refused: ${result.error}.`, error: result.error, ...(result.txHash && { txHash: result.txHash }) }),
       });
       return result;

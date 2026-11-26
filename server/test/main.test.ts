@@ -87,7 +87,7 @@ describe('compose', () => {
     expect(deps.approvals.list()[0]!.nonce).toBe('1');
     expect(seen.map((e) => [e.runId.startsWith('treasury-'), e.wallet, e.kind, e.text, e.error])).toEqual([
       [true, 'signvault', 'tx_refused', 'Re-arm refused: OwnerApprovalRequired.', 'OwnerApprovalRequired'],
-      [true, 'signvault', 'tx_sent', "The owner re-armed the tripwire from their phone. Sweeping is unlocked.", undefined],
+      [true, 'signvault', 'tx_sent', "The owner signed the re-arm. Sweeping is unlocked.", undefined],
     ]);
   });
 
