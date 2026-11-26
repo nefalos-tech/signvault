@@ -18,6 +18,7 @@ import { FakeChain } from './chain/fake';
 import { createViemChain } from './chain/viem';
 import { MemoryEvents } from './events';
 import { COMPANY_INBOX, MemoryInbox } from './inbox';
+import { fetchUsdyPrice, USDY_CMC_ID } from './price/cmc';
 import { PriceFeed } from './price/feed';
 import { Provider } from './provider';
 
@@ -87,7 +88,22 @@ function signer(name: 'AGENT_PRIVATE_KEY' | 'OPERATOR_PRIVATE_KEY', env: ChainEn
  * Reset swaps in a fresh Provider and Approvals behind stable ports, so an unused code
  * or a pending change from the last wallet pair cannot reach the next one.
  */
-export async function compose({ chain, llm, prices = new PriceFeed() }: { chain: ChainPort; llm: LlmPort; prices?: PriceFeed }): Promise<AppDeps> {
+/**
+ * Card T3: USDY's live price from CoinMarketCap. With CMC_API_KEY set it calls the Pro API, and without it the
+ * keyless public API. `priceSource` names the endpoint for the treasury feed. The key goes only in the request
+ * header: it is never logged, put in an event, or sent to the web.
+ */
+export function livePriceFeed(env: { CMC_API_KEY?: string }, fetchImpl: typeof fetch = fetch): { prices: PriceFeed; priceSource: string } {
+  const key = env.CMC_API_KEY?.trim();
+  return {
+    prices: new PriceFeed(() => fetchUsdyPrice(key, fetchImpl)),
+    priceSource: `CoinMarketCap ${key ? 'Pro API' : 'keyless public API'}, USDY id ${USDY_CMC_ID}`,
+  };
+}
+
+export async function compose({ chain, llm, prices = new PriceFeed(), priceSource }: {
+  chain: ChainPort; llm: LlmPort; prices?: PriceFeed; priceSource?: string;
+}): Promise<AppDeps> {
   const inbox = new MemoryInbox();
   const events = new MemoryEvents();
   let provider = new Provider(chain, inbox);
@@ -117,7 +133,7 @@ export async function compose({ chain, llm, prices = new PriceFeed() }: { chain:
       return wallets.map((w) => {
         const run = runAgent({
           wallet: w, chain, inbox, provider: providerPort, approvals: approvalsPort, llm, events,
-          ...(task === 'treasury' && { task: treasuryTask(prices) }),
+          ...(task === 'treasury' && { task: treasuryTask(prices, priceSource) }),
         });
         void run.done.then((r) => console.log(`run ${r.runId}: ${r.outcome} after ${r.toolCalls} tool calls`));
         return run.runId;
@@ -149,8 +165,7 @@ export async function compose({ chain, llm, prices = new PriceFeed() }: { chain:
 async function main() {
   const chain = createChain(process.env);
   const llm = createOpenAiLlm({ ...process.env, LLM_MODEL: process.env.LLM_MODEL || DEFAULT_MODEL });
-  // Card T3: no live USDY price until server/src/price/cmc.ts lands. Then: new PriceFeed(() => fetchUsdyPrice(CMC_API_KEY)).
-  const app = createApp(await compose({ chain, llm, prices: new PriceFeed() }));
+  const app = createApp(await compose({ chain, llm, ...livePriceFeed(process.env) }));
   const server = serve({ fetch: app.fetch, port: PORT }, () => {
     console.log(`server on http://localhost:${PORT}/api, CHAIN=${process.env.CHAIN || 'fake'}`);
   });

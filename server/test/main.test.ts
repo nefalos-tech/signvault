@@ -1,11 +1,11 @@
 import { readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
 import { FAKE_KEY_LABELS, INVOICE_AMOUNT, labelKey, rearmTypedData, type AppState, type LlmPort, type RunEvent } from '@signvault/shared';
 import { loadDeployment } from '@signvault/shared/deployments';
 import { createApp } from '../src/app';
 import { FakeChain } from '../src/chain/fake';
-import { compose, createChain } from '../src/main';
+import { compose, createChain, livePriceFeed } from '../src/main';
 
 const fake = loadDeployment('fake');
 
@@ -185,5 +185,96 @@ describe('createChain', () => {
 
   it('refuses an unknown CHAIN', () => {
     expect(() => createChain({ CHAIN: 'mainnet' })).toThrow(/fake, anvil or bsctest/);
+  });
+});
+
+describe('livePriceFeed', () => {
+  const KEY = 'test-key-not-real';
+  const NAV = 10n ** 18n;
+  const PRO = 'https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/latest?id=29256';
+  const KEYLESS = 'https://pro-api.coinmarketcap.com/public-api/v3/cryptocurrency/quotes/latest?id=29256';
+  const proBody = {
+    status: { error_code: 0, error_message: null },
+    data: { 29256: { id: 29256, symbol: 'USDY', quote: { USD: { price: 1.1542, last_updated: '2026-11-26T12:38:00.000Z' } } } },
+  };
+  const keylessBody = {
+    status: { error_code: '0' },
+    data: [{ id: 29256, symbol: 'USDY', last_updated: '2026-11-26T12:25:00.000Z', quote: [{ symbol: 'USD', price: 1.1541 }] }],
+  };
+
+  /** Answers every call with one response and records what CoinMarketCap would have received. */
+  function fakeFetch(status: number, body: unknown) {
+    const calls: { url: string; headers: Record<string, string> }[] = [];
+    const fetchImpl = async (url: string | URL | Request, init?: RequestInit) => {
+      calls.push({ url: String(url), headers: Object.fromEntries(new Headers(init?.headers)) });
+      return new Response(JSON.stringify(body), { status });
+    };
+    return { fetchImpl, calls };
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('with CMC_API_KEY, asks the Pro API with the key header and quotes its price', async () => {
+    const { fetchImpl, calls } = fakeFetch(200, proBody);
+    const { prices, priceSource } = livePriceFeed({ CMC_API_KEY: KEY }, fetchImpl);
+    expect(priceSource).toBe('CoinMarketCap Pro API, USDY id 29256');
+    expect(await prices.quote(NAV)).toEqual({ price: 1_154_200_000_000_000_000n, simulated: false, lastUpdated: '2026-11-26T12:38:00.000Z' });
+    expect(calls).toEqual([{ url: PRO, headers: { accept: 'application/json', 'x-cmc_pro_api_key': KEY } }]);
+  });
+
+  it('without CMC_API_KEY, asks the keyless public API', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { fetchImpl, calls } = fakeFetch(200, keylessBody);
+    const { prices, priceSource } = livePriceFeed({}, fetchImpl);
+    expect(priceSource).toBe('CoinMarketCap keyless public API, USDY id 29256');
+    expect((await prices.quote(NAV)).price).toBe(1_154_100_000_000_000_000n);
+    expect(calls.map((c) => c.url)).toEqual([KEYLESS]);
+    expect(calls[0]!.headers).not.toHaveProperty('x-cmc_pro_api_key');
+  });
+
+  it('on a failed call, reports no price', async () => {
+    const { fetchImpl } = fakeFetch(401, { status: { error_code: 1001, error_message: 'This API Key is invalid.' } });
+    const { prices } = livePriceFeed({ CMC_API_KEY: KEY }, fetchImpl);
+    expect(await prices.quote(NAV)).toEqual({ price: null, simulated: false, error: 'CmcError' });
+  });
+
+  /** Runs one treasury task that checks the price once, and returns its feed. */
+  async function treasuryFeed(env: { CMC_API_KEY?: string }, fetchImpl: typeof fetch) {
+    let step = 0;
+    const llm: LlmPort = {
+      next: async () => (step++ === 0
+        ? { toolCalls: [{ id: 'p', name: 'check_usdy_price', args: {} }] }
+        : { toolCalls: [{ id: 'f', name: 'finish', args: { summary: 'checked' } }] }),
+    };
+    const deps = await compose({ chain: new FakeChain({ treasury: true }), llm, ...livePriceFeed(env, fetchImpl) });
+    const seen: RunEvent[] = [];
+    const finished = new Promise<void>((done) => deps.events.subscribe((e) => {
+      seen.push(e);
+      if (e.kind === 'run_finished') done();
+    }));
+    await deps.startRun('signvault', 'treasury');
+    await finished;
+    return seen;
+  }
+
+  it("names CoinMarketCap, the API, id 29256, the price and its time in the treasury feed, and never the key", async () => {
+    const { fetchImpl } = fakeFetch(200, proBody);
+    const seen = await treasuryFeed({ CMC_API_KEY: KEY }, fetchImpl);
+    expect(seen.find((e) => e.kind === 'tool_result' && e.tool === 'check_usdy_price')?.text).toBe(
+      'CoinMarketCap Pro API, USDY id 29256: 1.1542 USD at 2026-11-26T12:38:00.000Z, against a redemption value of 1 mUSD: 15.42% apart.',
+    );
+    expect(JSON.stringify(seen)).not.toContain(KEY);
+  });
+
+  it('says the live price is unavailable when the call fails, and does not trip on it', async () => {
+    const { fetchImpl } = fakeFetch(500, 'oops');
+    const seen = await treasuryFeed({ CMC_API_KEY: KEY }, fetchImpl);
+    expect(seen.find((e) => e.kind === 'tool_result' && e.tool === 'check_usdy_price')?.text).toBe(
+      'The live USDY price is unavailable (CoinMarketCap Pro API, USDY id 29256: CmcError), so there is no split to act on. The redemption value is 1 mUSD.',
+    );
+    expect(seen.some((e) => e.tool === 'trip')).toBe(false);
+    expect(JSON.stringify(seen)).not.toContain(KEY);
   });
 });

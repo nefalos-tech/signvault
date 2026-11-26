@@ -15,6 +15,7 @@ export const TREASURY_PROMPT =
   + `Before you sweep, check USDY's market price against its redemption value. If they are more than ${TRIP_PERCENT}% apart, `
   + 'trip the wire, which moves everything back to cash and locks sweeping until the owner re-arms it, and do not sweep. '
   + 'If no live price is configured, there is no split to act on, so sweep as above. '
+  + 'If the live price is unavailable, there is no split either, so do not trip on it. '
   + 'When you have done all you can, call finish with a short summary.';
 
 type Vault = AppState['signvault'];
@@ -107,7 +108,7 @@ const redeem: Tool = {
   },
 };
 
-function checkPrice(prices: PriceFeed): Tool {
+function checkPrice(prices: PriceFeed, live: string): Tool {
   return {
     name: 'check_usdy_price',
     description: "Compare USDY's market price on CoinMarketCap with the redemption value of the vault's T-bills, in mUSD per token.",
@@ -122,15 +123,19 @@ function checkPrice(prices: PriceFeed): Tool {
         }
         const nav = BigInt(tripwire.redemptionValue);
         const quote = await prices.quote(nav);
-        const source = quote.simulated ? 'simulated price shock' : quote.price === null ? 'no live price configured' : 'CoinMarketCap';
+        const source = quote.simulated ? 'simulated price shock' : quote.price === null && !quote.error ? 'no live price configured' : live;
         const split = quote.price === null ? null : splitPercent(quote.price, nav);
-        const result = { usdyPrice: quote.price === null ? null : musd(quote.price), redemptionValue: musd(nav), splitPercent: split, source };
-        return {
-          result,
-          text: result.usdyPrice === null
-            ? `No live USDY price is configured, so there is no split to act on. The redemption value is ${result.redemptionValue} mUSD.`
-            : `USDY at ${result.usdyPrice} mUSD (${source}) against a redemption value of ${result.redemptionValue} mUSD: ${split}% apart.`,
+        const result = {
+          usdyPrice: quote.price === null ? null : musd(quote.price), redemptionValue: musd(nav), splitPercent: split, source,
+          ...(quote.lastUpdated && { lastUpdated: quote.lastUpdated }), ...(quote.error && { error: quote.error }),
         };
+        const against = `against a redemption value of ${result.redemptionValue} mUSD: ${split}% apart.`;
+        let text: string;
+        if (quote.error) text = `The live USDY price is unavailable (${live}: ${quote.error}), so there is no split to act on. The redemption value is ${result.redemptionValue} mUSD.`;
+        else if (result.usdyPrice === null) text = `No live USDY price is configured, so there is no split to act on. The redemption value is ${result.redemptionValue} mUSD.`;
+        else if (quote.simulated) text = `USDY at ${result.usdyPrice} mUSD (${source}) ${against}`;
+        else text = `${live}: ${result.usdyPrice} USD${quote.lastUpdated ? ` at ${quote.lastUpdated}` : ''}, ${against}`;
+        return { result, text };
       },
     }),
   };
@@ -157,11 +162,12 @@ function splitPercent(price: bigint, nav: bigint): string {
 
 const min = (a: bigint, b: bigint) => (a < b ? a : b);
 
-export function treasuryTask(prices: PriceFeed): AgentTask {
+/** `priceSource` names where the live price comes from, such as `CoinMarketCap Pro API, USDY id 29256`, for the feed. */
+export function treasuryTask(prices: PriceFeed, priceSource = 'CoinMarketCap'): AgentTask {
   return {
     name: 'treasury',
     system: TREASURY_PROMPT,
-    tools: [status, sweep, redeem, checkPrice(prices), trip, finish],
+    tools: [status, sweep, redeem, checkPrice(prices, priceSource), trip, finish],
     started: "Treasury run started on SignVault: keep this period's payroll in cash, put the rest in T-bills.",
   };
 }
