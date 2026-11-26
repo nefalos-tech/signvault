@@ -127,7 +127,27 @@ cd contracts && forge test
 
 ## Deployed addresses
 
-Card D1 fills in this section after the BSC testnet deploy.
+The contracts are on BSC testnet (chain 97). `contracts/script/Deploy.s.sol` deployed them, and [`deployments/97.json`](deployments/97.json) has the full list.
+
+| Role | Address |
+|---|---|
+| MockUSD (mUSD) | [`0x7B6562e1E8cde2AF559e9f33C92c812e149cA7A8`](https://testnet.bscscan.com/address/0x7B6562e1E8cde2AF559e9f33C92c812e149cA7A8) |
+| Operator | [`0x144B7220eBB6b2E22C330b453A434A1728b13912`](https://testnet.bscscan.com/address/0x144B7220eBB6b2E22C330b453A434A1728b13912) |
+| Agent | [`0x681854A983AD381706aa7304951b175270640043`](https://testnet.bscscan.com/address/0x681854A983AD381706aa7304951b175270640043) |
+| Owner (the phone wallet) | [`0xCFccC57E3Ec82227CAeb906eD74D0999281E024E`](https://testnet.bscscan.com/address/0xCFccC57E3Ec82227CAeb906eD74D0999281E024E) |
+
+| Pair | BaselineWallet | SignVault |
+|---|---|---|
+| 0 (a fresh server run uses this first) | [`0x07f80832c32D320ca0E31F4E02132Fc23170384B`](https://testnet.bscscan.com/address/0x07f80832c32D320ca0E31F4E02132Fc23170384B) | [`0x3c80cBBae3f394c960F1333750D8565d35FE91D1`](https://testnet.bscscan.com/address/0x3c80cBBae3f394c960F1333750D8565d35FE91D1) |
+| 1 | [`0x5cb5624da787b0D746a00673720130Ac5196D620`](https://testnet.bscscan.com/address/0x5cb5624da787b0D746a00673720130Ac5196D620) | [`0xf05Ad19CfbC8D75874A20B4b13B0F4e43b518870`](https://testnet.bscscan.com/address/0xf05Ad19CfbC8D75874A20B4b13B0F4e43b518870) |
+| 2 | [`0x7D2b5Cd9BE8aC7baA08105821a077C6e53f56aEB`](https://testnet.bscscan.com/address/0x7D2b5Cd9BE8aC7baA08105821a077C6e53f56aEB) | [`0xeF50B2059B372aE0022B1D967C6e5383647ACaCE`](https://testnet.bscscan.com/address/0xeF50B2059B372aE0022B1D967C6e5383647ACaCE) |
+| 3 | [`0xEbe601902232647294D8ef3781957578139752a2`](https://testnet.bscscan.com/address/0xEbe601902232647294D8ef3781957578139752a2) | [`0x23C63e0101263D8718E0f75930C105CE213db210`](https://testnet.bscscan.com/address/0x23C63e0101263D8718E0f75930C105CE213db210) |
+| 4 | [`0x7744da5ba00d9ee133C804C0ecA61D39C7A2d50e`](https://testnet.bscscan.com/address/0x7744da5ba00d9ee133C804C0ecA61D39C7A2d50e) | [`0xbF5A50E565433caB8852d645A64aA57367bb56Ed`](https://testnet.bscscan.com/address/0xbF5A50E565433caB8852d645A64aA57367bb56Ed) |
+| 5 | [`0x3e69E5f998A8f1188385E97E443378cd649148AF`](https://testnet.bscscan.com/address/0x3e69E5f998A8f1188385E97E443378cd649148AF) | [`0xFC65C1639490F16A22b42675f243a92d2150E7B5`](https://testnet.bscscan.com/address/0xFC65C1639490F16A22b42675f243a92d2150E7B5) |
+| 6 | [`0x0676Bac1f99edF54A5d06061fa376F08bfe882Ff`](https://testnet.bscscan.com/address/0x0676Bac1f99edF54A5d06061fa376F08bfe882Ff) | [`0xeF68900dBEcfD099815b411373e3ebce9f68cE52`](https://testnet.bscscan.com/address/0xeF68900dBEcfD099815b411373e3ebce9f68cE52) |
+| 7 | [`0x825e75354B7caBe3cC0e524Bb63ACffa093F6F45`](https://testnet.bscscan.com/address/0x825e75354B7caBe3cC0e524Bb63ACffa093F6F45) | [`0x3d1De63954180370700dD8C5461266b8cba9077A`](https://testnet.bscscan.com/address/0x3d1De63954180370700dD8C5461266b8cba9077A) |
+
+Each wallet starts with 10 mUSD. Each BaselineWallet has a daily cap of 0.01 mUSD, and each SignVault lists Vendor 1 at 0.01 mUSD per day.
 
 ## Run it on testnet
 
