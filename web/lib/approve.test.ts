@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { FAKE_KEY_LABELS, INVOICE_AMOUNT, VENDORS, labelAddress, labelKey } from '@signvault/shared';
 import type { PendingChange } from '@signvault/shared';
 import { MOCK_CHANGES, MOCK_STATE } from '../app/approve/fixture';
-import { changeTypedData, describeChange } from './approve';
+import { canApprove, changeTypedData, describeChange } from './approve';
 
 const owner = privateKeyToAccount(labelKey(FAKE_KEY_LABELS.owner));
 const state = MOCK_STATE;
@@ -60,6 +60,17 @@ describe('describeChange', () => {
   it('shortens an address that is not a known vendor', () => {
     const change = { ...addVendor2, to: '0x08324C0cba6EcF6AfC1A35E5E69483428bbE13dD', amount: '500000000000000000' } as const;
     expect(describeChange(change, state.vendors)).toBe('Add 0x0832…13dD at 0.5 mUSD per day');
+  });
+});
+
+describe('canApprove', () => {
+  it('lets the owner approve a pending change and sign again after a failed relay', () => {
+    expect(canApprove('pending')).toBe(true);
+    expect(canApprove('failed')).toBe(true);
+  });
+
+  it('refuses an applied change', () => {
+    expect(canApprove('applied')).toBe(false);
   });
 });
 
