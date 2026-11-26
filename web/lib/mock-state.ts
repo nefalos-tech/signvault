@@ -56,8 +56,8 @@ const EMAIL_LINE = /^Email from (\S+), "([^"]*)": ([\s\S]*)$/;
 /**
  * What the server's /api/state would say after these events, for mock mode, where there is no server.
  * Folds the recorded runs over the spec 4 starting state: a successful pay moves money, a confirmed
- * limit change raises the cap, a payee change request adds a pending change, a delivered email lands
- * in the inbox. A refused call changes nothing.
+ * limit change raises the cap, a payee change request adds a pending change, the owner's approval
+ * applies it, a delivered email lands in the inbox. A refused call changes nothing.
  */
 export function mockState(events: RunEvent[]): AppState {
   const s = initialState();
@@ -74,6 +74,10 @@ export function mockState(events: RunEvent[]): AppState {
         id: e.id, ts: e.ts, from: m?.[1] ?? 'unknown', to: 'payments@acme.test',
         subject: m?.[2] ?? '(no subject)', body: m?.[3] ?? e.text,
       }];
+      continue;
+    }
+    if (e.kind === 'tx_sent' && e.runId === 'owner-approval' && isPendingChange(e.result)) {
+      applyApproval(s, e.result);
       continue;
     }
     if (e.kind !== 'tool_result' || e.error) continue;
@@ -94,11 +98,41 @@ export function mockState(events: RunEvent[]): AppState {
           payees: s.signvault.payees.map((p) => (p === payee ? { ...p, paidThisPeriod: true } : p)),
         };
       }
-    } else if (e.wallet === 'signvault' && e.tool === 'request_payee_change' && isPendingChange(e.result)) {
-      s.pendingChanges = [...s.pendingChanges, e.result];
+    } else if (e.wallet === 'signvault' && e.tool === 'request_payee_change' && isChangeRef(e.result)) {
+      // The tool gives the model the amount in mUSD and no nonce, so both come from the call and the vault.
+      // Asking again for an open change returns the same id, as the server does.
+      const { id, to } = e.result;
+      if (!s.pendingChanges.some((c) => c.id === id)) {
+        s.pendingChanges = [...s.pendingChanges, { id, to, amount: wei(args.amount).toString(), nonce: s.signvault.nonce, status: 'pending' }];
+      }
     }
   }
   return s;
+}
+
+/**
+ * The owner signed and the server relayed it (the `owner-approval` line capture.mjs saves): the change is
+ * applied, its payee joins the list, and the vault nonce moves on, taking every change still open with it.
+ */
+function applyApproval(s: AppState, applied: PendingChange) {
+  const nonce = (BigInt(s.signvault.nonce) + 1n).toString();
+  const changes = s.pendingChanges.map((c) => {
+    if (c.id === applied.id) return applied;
+    return c.status === 'applied' ? c : { ...c, nonce };
+  });
+  s.pendingChanges = changes.some((c) => c.id === applied.id) ? changes : [...changes, applied];
+  const listed = s.signvault.payees.some((p) => p.to.toLowerCase() === applied.to.toLowerCase());
+  s.signvault = {
+    ...s.signvault,
+    nonce,
+    payees: listed ? s.signvault.payees : [...s.signvault.payees, { to: applied.to, amount: applied.amount, paidThisPeriod: false }],
+  };
+}
+
+function isChangeRef(x: unknown): x is Pick<PendingChange, 'id' | 'to'> {
+  if (!x || typeof x !== 'object') return false;
+  const c = x as Record<string, unknown>;
+  return typeof c.id === 'string' && typeof c.to === 'string';
 }
 
 function isPendingChange(x: unknown): x is PendingChange {

@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import type { RunEvent } from '@signvault/shared';
-import baseline from '../fixtures/baseline-run.json';
-import signvault from '../fixtures/signvault-run.json';
+import scripted from './scripted-runs.json';
 import { replayLength, visibleEvents } from './player';
 
-const runs = [baseline as RunEvent[], signvault as RunEvent[]];
+// The scripted runs, not web/fixtures/, which card D3 refreshes from live runs.
+const baseline = scripted.baseline as RunEvent[];
+const signvault = scripted.signvault as RunEvent[];
+const runs = [baseline, signvault];
 
 describe('visibleEvents', () => {
   it('starts both runs at once, each from its own first event', () => {
@@ -20,7 +22,7 @@ describe('visibleEvents', () => {
     expect(refusedAt.map((e) => e.error).sort()).toEqual(['DailyCapExceeded', 'NotOnTheList']);
   });
 
-  it('shows every event in fixture order once the replay is over', () => {
+  it('shows every event in recorded order once the replay is over', () => {
     const shown = visibleEvents(runs, replayLength(runs));
     expect(shown.filter((e) => e.wallet === 'baseline')).toEqual(baseline);
     expect(shown.filter((e) => e.wallet === 'signvault')).toEqual(signvault);
